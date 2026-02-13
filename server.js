@@ -388,7 +388,7 @@ app.post('/whatsapp/notify-approval', express.json(), async (req, res) => {
   }
 });
 
-// Admin settings endpoints (store settings in storage/whatsapp_settings.json)
+// Admin settings endpoint (returns default settings if not found)
 app.get('/admin/settings', (req, res) => {
   try {
     const settingsPath = path.join(__dirname, 'storage', 'whatsapp_settings.json');
@@ -407,6 +407,13 @@ app.get('/admin/settings', (req, res) => {
     console.error('get settings error', err);
     res.status(500).json({ error: 'Failed to read settings' });
   }
+});
+
+// Fallback for get-presigned-photo-upload (local upload only)
+app.post('/get-presigned-photo-upload', (req, res) => {
+  // This endpoint is a placeholder for S3. For local, just return a local upload URL.
+  const baseUrl = process.env.API_URL || `http://localhost:${PORT}`;
+  res.json({ url: `${baseUrl}/upload` });
 });
 
 app.post('/admin/settings', express.json(), (req, res) => {
@@ -747,7 +754,7 @@ app.post('/save-template', express.json(), (req, res) => {
   }
 });
 
-// Load template data endpoint
+// Load template data endpoint (with default fallback)
 app.get('/load-template', (req, res) => {
   try {
     const templatePath = path.join(__dirname, 'storage', 'template', 'template.json');
@@ -755,7 +762,14 @@ app.get('/load-template', (req, res) => {
       const templateData = fs.readFileSync(templatePath, 'utf8');
       res.json(JSON.parse(templateData));
     } else {
-      res.json({ basePdf: '', schemas: [[]] });
+      // Fallback: serve default template
+      const defaultTemplatePath = path.join(__dirname, 'storage', 'template', 'default-template.json');
+      if (fs.existsSync(defaultTemplatePath)) {
+        const defaultData = fs.readFileSync(defaultTemplatePath, 'utf8');
+        res.json(JSON.parse(defaultData));
+      } else {
+        res.status(404).json({ error: 'No template found. Please design and save a template first.' });
+      }
     }
   } catch (error) {
     console.error('Error loading template:', error);
