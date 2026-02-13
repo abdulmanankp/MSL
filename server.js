@@ -1,10 +1,3 @@
-// Endpoint: Get S3 pre-signed upload URL for profile photo
-import { PutObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-
-
-// Move route definition below app initialization
-
 import dotenv from 'dotenv';
 import express from 'express';
 import multer from 'multer';
@@ -12,121 +5,23 @@ import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { uploadToS3, getPresignedUrl, s3 } from './server/s3Client.js';
-import { GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
-import { pipeline } from 'stream';
 import TemplateManager from './server/templateManager.js';
 import { logInfo, logError, logWarn } from './server/logger.js';
 import { sendRegistrationEmail, sendApprovalEmail } from './server/emailService.js';
-import { PDFDocument, rgb } from 'pdf-lib';
 
+// Load environment variables from .env file
 dotenv.config();
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// S3 pre-signed upload endpoint (now after app initialization)
-app.post('/get-presigned-photo-upload', express.json(), async (req, res) => {
-  try {
-    const { filename, contentType } = req.body;
-    if (!filename || !contentType) {
-      return res.status(400).json({ error: 'filename and contentType required' });
-    }
-    const bucket = 'mslpakistan';
-    const key = `profile/${Date.now()}-${filename}`;
-    const command = new PutObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      ContentType: contentType,
-    });
-    const url = await getSignedUrl(s3, command, { expiresIn: 300 }); // 5 min expiry
-    res.json({ url, key, bucket });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to generate pre-signed URL', details: err.message });
-  }
-});
-
-// --- Server status and error logging ---
-const logsDir = path.join(__dirname, 'logs');
-if (!fs.existsSync(logsDir)) {
-  fs.mkdirSync(logsDir, { recursive: true });
-}
-const statusLogPath = path.join(logsDir, 'server-status.log');
-function logServerStatus(message) {
-  const timestamp = new Date().toISOString();
-  fs.appendFileSync(statusLogPath, `[${timestamp}] ${message}\n`);
-}
-
-// --- Middleware ---
-app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
-
-// --- Routes ---
-// Download card endpoint (S3, auto-delete after download)
-app.get('/download-card/:key', async (req, res) => {
-  const key = decodeURIComponent(req.params.key);
-  const bucket = process.env.AWS_S3_BUCKET || 'mslpakistan';
-  try {
-    const command = new GetObjectCommand({ Bucket: bucket, Key: key });
-    const s3Response = await s3.send(command);
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${key.split('/').pop()}"`);
-    pipeline(s3Response.Body, res, async (err) => {
-      if (err) {
-        console.error('S3 stream error:', err);
-        res.status(500).end('Failed to download card');
-      } else {
-        try {
-          const delCommand = new DeleteObjectCommand({ Bucket: bucket, Key: key });
-          await s3.send(delCommand);
-        } catch (delErr) {
-          console.error('Failed to delete card from S3:', delErr);
-        }
-      }
-    });
-  } catch (err) {
-    console.error('Download card error:', err);
-    res.status(500).json({ error: 'Failed to download card', details: err.message });
-  }
-});
-// ...existing code...
-// Example function to generate a simple PDF in memory
-async function generatePdfForMember(member) {
-  // Create a new PDFDocument
-  const pdfDoc = await PDFDocument.create();
-  const page = pdfDoc.addPage([350, 200]);
-  page.drawText(`Member Name: ${member?.first_name || 'N/A'}`);
-  page.drawText(`Membership ID: ${member?.membership_id || 'N/A'}`, { y: 160 });
-  // Add more drawing logic as needed
-  const pdfBytes = await pdfDoc.save();
-  return Buffer.from(pdfBytes);
-}
-
-// POST /generate-pdf: Generate PDF in memory and stream to client
-app.post('/generate-pdf', express.json(), async (req, res) => {
-  try {
-    const member = req.body.member;
-    if (!member) return res.status(400).json({ error: 'member data required' });
-    const pdfBuffer = await generatePdfForMember(member);
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'attachment; filename="card.pdf"');
-    res.send(pdfBuffer);
-  } catch (err) {
-    console.error('PDF generation error:', err);
-    res.status(500).json({ error: 'Failed to generate PDF' });
-  }
-});
-
-
-// (Removed duplicate imports and initialization)
-
 // Initialize Template Manager
 const storageDir = path.join(__dirname, 'storage');
 const templateManager = new TemplateManager(storageDir);
-app.use(cors());
+
 // Enable CORS
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
@@ -833,24 +728,13 @@ app.get('/load-template', (req, res) => {
 });
 
 // Serve uploaded files
-// Add CORS headers for uploads before serving static files
-app.use('/uploads', (req, res, next) => {
-  // Allow only the production frontend origin for CORS
-  res.header('Access-Control-Allow-Origin', 'https://join.mslpakistan.org');
-  res.header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
-  next();
-});
 app.use('/uploads', express.static(uploadsDir));
 
 // Serve template files
 app.use('/templates', express.static(path.join(__dirname, 'storage', 'template')));
 
 // Serve font files for pdfme
-const fontsDir = path.join(__dirname, 'public', 'fonts');
+const fontsDir = path.join(__dirname, 'storage', 'fonts');
 console.log('Fonts directory path:', fontsDir);
 console.log('Fonts directory exists:', fs.existsSync(fontsDir));
 if (fs.existsSync(fontsDir)) {
@@ -877,15 +761,8 @@ app.use('/fonts', (req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
-  // Set correct Content-Type for common font extensions
   if (req.path.endsWith('.ttf')) {
-    res.setHeader('Content-Type', 'font/ttf');
-  } else if (req.path.endsWith('.otf')) {
-    res.setHeader('Content-Type', 'font/otf');
-  } else if (req.path.endsWith('.woff')) {
-    res.setHeader('Content-Type', 'font/woff');
-  } else if (req.path.endsWith('.woff2')) {
-    res.setHeader('Content-Type', 'font/woff2');
+    res.setHeader('Content-Type', 'application/x-font-ttf');
   }
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
@@ -897,37 +774,24 @@ app.use('/fonts', express.static(fontsDir));
 // Get PDF template endpoint
 app.get('/get-pdf-template', (req, res) => {
   const pdfPath = path.join(__dirname, 'storage', 'template', 'template.pdf');
-  if (!fs.existsSync(pdfPath)) {
-    return res.status(404).json({ error: 'Template PDF not found' });
+  if (fs.existsSync(pdfPath)) {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+    res.header('Content-Type', 'application/pdf');
+    res.sendFile(pdfPath);
+  } else {
+    res.status(404).json({ error: 'PDF template not found' });
   }
-  res.sendFile(pdfPath);
 });
-
 
 try {
   app.listen(PORT, () => {
-    const msg = `🚀 Server running on http://localhost:${PORT}`;
-    logInfo(msg);
-    logServerStatus(msg);
+    logInfo(`🚀 Server running on http://localhost:${PORT}`);
   });
 } catch (err) {
-  const errMsg = `Failed to start server: ${err && err.message ? err.message : err}`;
-  console.error(errMsg);
-  logServerStatus(errMsg);
+  console.error('Failed to start server:', err);
 }
-
-// Log uncaught exceptions and unhandled rejections to server-status.log
-process.on('uncaughtException', (err) => {
-  const msg = `Uncaught exception: ${err && err.stack ? err.stack : err}`;
-  console.error(msg);
-  logServerStatus(msg);
-});
-
-process.on('unhandledRejection', (reason) => {
-  const msg = `Unhandled rejection: ${reason}`;
-  console.error(msg);
-  logServerStatus(msg);
-});
 
 async function sendWhatsAppTemplate(phone, templateName, languageCode = 'en', parameters = [], buttonParam = null, buttonType = 'url') {
   if (!WHATSAPP_TOKEN || !WHATSAPP_PHONE_NUMBER_ID) {

@@ -167,8 +167,22 @@ export async function generatePdfmeCard(member: Database['public']['Tables']['me
       // Try local server path (e.g., "/templates/template.pdf")
       if (template.basePdf.startsWith('/')) {
         try {
-          const pdfResp = await fetch(`http://localhost:3001${template.basePdf}`, { mode: 'cors' });
-          if (!pdfResp.ok) throw new Error(`Failed to fetch PDF from path: ${pdfResp.status}`);
+    // Ensure template.basePdf is raw PDF data (Uint8Array) before generation.
+    // Only allow Uint8Array or fetch from local /get-pdf-template endpoint.
+    const ensureBasePdfIsBytes = async () => {
+      if (!template.basePdf) {
+        // Try to fetch from local endpoint
+        const resp = await fetch('http://localhost:3001/get-pdf-template', { mode: 'cors' });
+        if (!resp.ok) throw new Error('No PDF template found. Please upload and save a PDF template first.');
+        const buf = await resp.arrayBuffer();
+        template.basePdf = new Uint8Array(buf);
+        return;
+      }
+      if (template.basePdf instanceof Uint8Array) {
+        return;
+      }
+      throw new Error('Unsupported basePdf format. Only local PDF is allowed.');
+    };
           const buf = await pdfResp.arrayBuffer();
           template.basePdf = new Uint8Array(buf);
           return;
