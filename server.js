@@ -22,16 +22,30 @@ const PORT = process.env.PORT || 3001;
 const storageDir = path.join(__dirname, 'storage');
 const templateManager = new TemplateManager(storageDir);
 
-// Enable CORS: allow join.mslpakistan.org for all endpoints (PDF, photo upload/fetch, API)
+// Enable CORS: allow requests from frontend domain
 app.use((req, res, next) => {
-  const allowedOrigin = process.env.NODE_ENV === 'production'
-    ? 'https://join.mslpakistan.org'
-    : '*';
-  res.header('Access-Control-Allow-Origin', allowedOrigin);
+  const allowedOrigins = [
+    'https://join.mslpakistan.org',
+    'https://mslpakistan.online',
+    'http://localhost:8080', // for local development
+    'http://localhost:5173'  // for Vite dev server
+  ];
+  
+  const origin = req.headers.origin;
+  
+  // Allow requests from allowed origins or from the same domain
+  if (allowedOrigins.includes(origin) || !origin) {
+    res.header('Access-Control-Allow-Origin', origin || '*');
+  } else if (process.env.NODE_ENV !== 'production') {
+    res.header('Access-Control-Allow-Origin', '*');
+  }
+  
   res.header('Vary', 'Origin');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   res.header('Access-Control-Expose-Headers', 'Content-Disposition');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
@@ -57,11 +71,29 @@ if (!fs.existsSync(templateJsonPath)) {
 
 // Ensure CORS headers for static files (PDF, uploads, fonts)
 const staticCORS = (req, res, next) => {
-  const allowedOrigin = process.env.NODE_ENV === 'production'
-    ? 'https://join.mslpakistan.org'
-    : '*';
-  res.header('Access-Control-Allow-Origin', allowedOrigin);
+  const allowedOrigins = [
+    'https://join.mslpakistan.org',
+    'https://mslpakistan.online',
+    'http://localhost:8080',
+    'http://localhost:5173'
+  ];
+  
+  const origin = req.headers.origin;
+  
+  if (allowedOrigins.includes(origin) || !origin) {
+    res.header('Access-Control-Allow-Origin', origin || '*');
+  } else if (process.env.NODE_ENV !== 'production') {
+    res.header('Access-Control-Allow-Origin', '*');
+  }
+  
   res.header('Vary', 'Origin');
+  res.header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  
   next();
 };
 app.use('/uploads', staticCORS, express.static(uploadsDir));
