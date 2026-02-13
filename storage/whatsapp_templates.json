@@ -1,0 +1,38 @@
+{
+  "member_register": {
+    "id": "member_register",
+    "name": "Member Registration",
+    "language": "en_US",
+    "type": "registration",
+    "description": "Automatic template for member registration",
+    "content": {
+      "text": "*Assalamu Alaikum {{first_name}},*\n\nYour registration with Muslim Students League (MSL) Pakistan has been successfully received.\n\n*Membership ID:* {{membership_id}}\n\nOur team will review your information shortly. Once your membership is approved, you will be informed automatically and guided to download your official Membership Card from the MSL Pakistan website.\n\nThank you for your interest in becoming part of MSL Pakistan.\n\nDevelop by WEBNIX"
+    },
+    "createdAt": "2026-02-05T20:14:47.373Z",
+    "isDefault": true
+  },
+  "otp_verification": {
+    "id": "otp_verification",
+    "name": "OTP Verification",
+    "language": "en_US",
+    "type": "otp",
+    "description": "Automatic template for card download verification",
+    "content": {
+      "text": "OTP Code: {{otp_code}}. This is your OTP for Membership Card. The OTP is valid for 10 minutes. Call 123-456-7890 if you did not perform this request."
+    },
+    "createdAt": "2026-02-05T20:14:47.374Z",
+    "isDefault": true
+  },
+  "approved": {
+    "id": "approved",
+    "name": "Membership Approved",
+    "language": "en_US",
+    "type": "approval",
+    "description": "Automatic template when membership is approved",
+    "content": {
+      "text": "*Assalamu Alaikum {{first_name}},*\n\nWe are pleased to inform you that your membership with Muslim Students League (MSL) Pakistan has been approved successfully.\n\nYour official digital membership card has been generated and is now available for download.\n\nPlease click the button below and log in using your registered details to download your membership card.\n\nThis card serves as your official identification within MSL Pakistan.\n\nMembership ID: {{membership_id}}\n\nBest Regards\n*MSL IT DEPARTMENT*\n\nDevelop by Abdul Manan"
+    },
+    "createdAt": "2026-02-05T20:14:47.374Z",
+    "isDefault": true
+  }
+}

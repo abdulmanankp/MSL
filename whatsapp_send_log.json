@@ -1,0 +1,23 @@
+[
+  {
+    "phone": "03069116767",
+    "formatted": "+923069116767",
+    "status": 200,
+    "response": "{\"messaging_product\":\"whatsapp\",\"contacts\":[{\"input\":\"+923069116767\",\"wa_id\":\"923069116767\"}],\"messages\":[{\"id\":\"wamid.HBgMOTIzMDY5MTE2NzY3FQIAERgSOTJBRTExQTcxNjFDMTNDNkZBAA==\"}]}",
+    "time": "2026-02-06T19:37:31.581Z"
+  },
+  {
+    "phone": "03018537245",
+    "formatted": "+923018537245",
+    "status": 200,
+    "response": "{\"messaging_product\":\"whatsapp\",\"contacts\":[{\"input\":\"+923018537245\",\"wa_id\":\"923018537245\"}],\"messages\":[{\"id\":\"wamid.HBgMOTIzMDE4NTM3MjQ1FQIAERgSQUExMTYyQjE2QzhENTBEREFGAA==\"}]}",
+    "time": "2026-02-06T19:41:02.994Z"
+  },
+  {
+    "phone": "03018537245",
+    "formatted": "+923018537245",
+    "status": 200,
+    "response": "{\"messaging_product\":\"whatsapp\",\"contacts\":[{\"input\":\"+923018537245\",\"wa_id\":\"923018537245\"}],\"messages\":[{\"id\":\"wamid.HBgMOTIzMDE4NTM3MjQ1FQIAERgSRkEwMTdFNDlEMzM3MjI5Qjc1AA==\"}]}",
+    "time": "2026-02-06T19:42:09.357Z"
+  }
+]

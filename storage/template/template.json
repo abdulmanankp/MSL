@@ -1,0 +1,93 @@
+{
+  "schemas": [
+    [
+      {
+        "name": "membership_id",
+        "type": "text",
+        "content": "{{membership_id}}",
+        "position": {
+          "x": 19.34,
+          "y": 92.03
+        },
+        "width": 36.25,
+        "height": 4.23,
+        "fontSize": 8,
+        "fontColor": "#014f35",
+        "readOnly": false,
+        "fontName": "Montserrat",
+        "fontWeight": 400,
+        "bold": false
+      },
+      {
+        "name": "district",
+        "type": "text",
+        "content": "{{district}}",
+        "position": {
+          "x": 26.18,
+          "y": 96.16
+        },
+        "width": 32.81,
+        "height": 3.7,
+        "fontSize": 8,
+        "fontColor": "#014f35",
+        "readOnly": false,
+        "fontName": "Montserrat",
+        "fontWeight": 400,
+        "bold": false
+      },
+      {
+        "name": "full_name",
+        "type": "text",
+        "content": "{{full_name}}",
+        "position": {
+          "x": 3.57,
+          "y": 82.22
+        },
+        "width": 56.62,
+        "height": 7.94,
+        "fontSize": 13,
+        "fontColor": "#000000",
+        "alignment": "center",
+        "readOnly": false,
+        "fontName": "Montserrat-Bold",
+        "fontWeight": 400,
+        "lineHeight": 0,
+        "bold": false
+      },
+      {
+        "name": "designation",
+        "type": "text",
+        "content": "{{designation}}",
+        "position": {
+          "x": 5.42,
+          "y": 87.69
+        },
+        "width": 52.39,
+        "height": 5.29,
+        "fontSize": 8,
+        "fontColor": "#000000",
+        "readOnly": false,
+        "fontName": "Montserrat",
+        "alignment": "center",
+        "fontWeight": 400,
+        "bold": false
+      },
+      {
+        "name": "profile_photo",
+        "type": "image",
+        "content": "",
+        "position": {
+          "x": 11.38,
+          "y": 43.15
+        },
+        "width": 40.48,
+        "height": 38.63,
+        "borderWidth": 1,
+        "borderColor": "#FFFFFF"
+      }
+    ],
+    []
+  ],
+  "basePdf": "http://localhost:3001/get-pdf-template",
+  "pdfmeVersion": "5.5.8"
+}

@@ -1,0 +1,146 @@
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+.logo:hover {
+  filter: drop-shadow(0 0 2em #646cffaa);
+}
+.logo.react:hover {
+  filter: drop-shadow(0 0 2em #61dafbaa);
+}
+
+@keyframes logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+    animation: logo-spin infinite 20s linear;
+  }
+}
+
+.card {
+  padding: 2em;
+}
+
+.read-the-docs {
+  color: #888;
+}
+
+/* Visual Template Editor Styles */
+.pdf-container {
+  position: relative;
+  border: 2px dashed #d1d5db;
+  border-radius: 8px;
+  overflow: hidden;
+  min-height: 600px;
+  background-color: #f9fafb;
+}
+
+.pdf-field-element {
+  position: absolute;
+  border: 1px solid #e5e7eb;
+  background-color: rgba(255, 255, 255, 0.9);
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: grab;
+  user-select: none;
+  font-size: 12px;
+  min-width: 80px;
+  z-index: 10;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+}
+
+.pdf-field-element:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
+}
+
+.pdf-field-element.selected {
+  border: 2px solid #3b82f6;
+  background-color: rgba(59, 130, 246, 0.1);
+}
+
+.pdf-field-element.dragging {
+  cursor: grabbing;
+  opacity: 0.8;
+  transform: rotate(5deg);
+}
+
+.field-icon {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 4px;
+}
+
+.field-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.field-delete-btn {
+  margin-left: 8px;
+  color: #ef4444;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 2px;
+  transition: color 0.2s ease;
+}
+
+.field-delete-btn:hover {
+  color: #dc2626;
+  background-color: rgba(239, 68, 68, 0.1);
+}
+
+.pdf-drop-zone {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+  pointer-events: none;
+}
+
+.pdf-drop-zone.active {
+  background-color: rgba(59, 130, 246, 0.1);
+  border-color: #3b82f6;
+}
+
+/* React PDF styles */
+.react-pdf__Document {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.react-pdf__Page {
+  max-width: calc(100% - 2em);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  margin-bottom: 1em;
+}
+
+.react-pdf__Page__canvas {
+  max-width: 100%;
+  height: auto !important;
+}

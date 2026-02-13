@@ -1,0 +1,82 @@
+#!/usr/bin/env node
+
+/**
+ * BULLETPROOF Database Setup - Works in ANY State
+ * Run with: node bulletproof-setup.js
+ */
+
+console.log('🛡️  MSL Pakistan - BULLETPROOF Database Setup');
+console.log('=============================================');
+console.log('');
+console.log('🎯 SOLUTION: Migration that works regardless of current database state');
+console.log('');
+console.log('📄 NEW FILE: bulletproof-database-setup.sql');
+console.log('');
+console.log('✅ WHAT THIS VERSION DOES:');
+console.log('   - Safely drops ALL existing objects first');
+console.log('   - Uses conditional logic to handle any state');
+console.log('   - Recreates everything fresh and clean');
+console.log('   - Works on existing projects OR fresh projects');
+console.log('   - Handles all possible conflicts gracefully');
+console.log('');
+console.log('🚀 HOW TO USE:');
+console.log('');
+console.log('1. Go to Supabase Dashboard: https://supabase.com/dashboard');
+console.log('2. Select your project (existing or new)');
+console.log('3. Click "SQL Editor"');
+console.log('4. Open file: F:\\MSL\\bulletproof-database-setup.sql');
+console.log('5. Copy ALL content and paste into SQL Editor');
+console.log('6. Click "Run" button');
+console.log('');
+console.log('⚠️  WHAT THIS DOES:');
+console.log('   - Will DELETE all existing MSL data');
+console.log('   - Will recreate everything from scratch');
+console.log('   - Safe to run multiple times');
+console.log('   - Works on any Supabase project state');
+console.log('');
+console.log('👤 ADMIN USER:');
+console.log('');
+console.log('After migration:');
+console.log('1. Go to Authentication > Users');
+console.log('2. Add user: admin@mslpakistan.org / Admin123!');
+console.log('3. ✅ Auto-confirm user');
+console.log('4. The migration already set up the admin role');
+console.log('');
+console.log('🧪 TESTING:');
+console.log('');
+console.log('npm run dev');
+console.log('# Visit: http://localhost:8080/admin');
+console.log('# Login: admin@mslpakistan.org / Admin123!');
+console.log('');
+console.log('📊 VERIFICATION QUERIES:');
+console.log('');
+console.log('Run in SQL Editor:');
+console.log('');
+console.log('   -- Check tables');
+console.log('   SELECT table_name FROM information_schema.tables');
+console.log('   WHERE table_schema = \'public\' AND table_name IN (\'members\', \'user_roles\');');
+console.log('');
+console.log('   -- Check enums');
+console.log('   SELECT typname FROM pg_type');
+console.log('   WHERE typname IN (\'education_level\', \'area_of_interest\', \'member_status\', \'app_role\');');
+console.log('');
+console.log('   -- Check storage');
+console.log('   SELECT id, name, public FROM storage.buckets WHERE id = \'profile-photos\';');
+console.log('');
+console.log('   -- Check admin user');
+console.log('   SELECT u.email, ur.role FROM auth.users u');
+console.log('   LEFT JOIN public.user_roles ur ON u.id = ur.user_id');
+console.log('   WHERE u.email = \'admin@mslpakistan.org\';');
+console.log('');
+console.log('✅ SUCCESS CRITERIA:');
+console.log('   - 2 tables (members, user_roles)');
+console.log('   - 4 enums (education_level, area_of_interest, member_status, app_role)');
+console.log('   - 1 storage bucket (profile-photos)');
+console.log('   - Admin user with admin role');
+console.log('');
+console.log('🎉 THIS SHOULD WORK NO MATTER WHAT!');
+console.log('');
+console.log('If this still fails, you may have a corrupted Supabase project.');
+console.log('In that case, create a completely new Supabase project.');
+console.log('');
+console.log('🚀 Ready to run bulletproof-database-setup.sql?');
