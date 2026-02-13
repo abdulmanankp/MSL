@@ -38,6 +38,23 @@ app.use((req, res, next) => {
   next();
 });
 
+// Ensure uploads directory exists
+const uploadsDir = path.join(__dirname, 'public', 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Ensure storage/template directory exists for templates
+const templateDir = path.join(__dirname, 'storage', 'template');
+if (!fs.existsSync(templateDir)) {
+  fs.mkdirSync(templateDir, { recursive: true });
+}
+// Ensure template.json exists
+const templateJsonPath = path.join(templateDir, 'template.json');
+if (!fs.existsSync(templateJsonPath)) {
+  fs.writeFileSync(templateJsonPath, JSON.stringify({ basePdf: '', schemas: [[]] }, null, 2));
+}
+
 // Ensure CORS headers for static files (PDF, uploads, fonts)
 const staticCORS = (req, res, next) => {
   const allowedOrigin = process.env.NODE_ENV === 'production'
@@ -59,23 +76,6 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.get('/test', (req, res) => {
   res.json({ message: 'Server is running' });
 });
-
-// Ensure uploads directory exists
-const uploadsDir = path.join(__dirname, 'public', 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-// Ensure storage/template directory exists for templates
-const templateDir = path.join(__dirname, 'storage', 'template');
-if (!fs.existsSync(templateDir)) {
-  fs.mkdirSync(templateDir, { recursive: true });
-}
-// Ensure template.json exists
-const templateJsonPath = path.join(templateDir, 'template.json');
-if (!fs.existsSync(templateJsonPath)) {
-  fs.writeFileSync(templateJsonPath, JSON.stringify({ basePdf: '', schemas: [[]] }, null, 2));
-}
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
