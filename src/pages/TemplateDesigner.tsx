@@ -48,13 +48,17 @@ const isPdfValid = async (data: Uint8Array): Promise<boolean> => {
       console.error('❌ PDF validation failed: File too small (< 4 bytes)');
       return false;
     }
-    const header = String.fromCharCode(...data.slice(0, 4));
+    // Use Array.from for safer conversion of potentially large arrays
+    const headerBytes = Array.from(data.slice(0, 4));
+    const header = String.fromCharCode(...headerBytes);
     if (!header.startsWith('%PDF')) {
       console.error('❌ PDF validation failed: Invalid PDF header, got:', header);
       return false;
     }
     
-    const tail = String.fromCharCode(...data.slice(-10));
+    // Use Array.from for safer conversion of tail bytes
+    const tailBytes = Array.from(data.slice(-10));
+    const tail = String.fromCharCode(...tailBytes);
     if (!tail.includes('%%EOF')) {
       console.warn('⚠️ PDF missing EOF marker, might be truncated');
     }

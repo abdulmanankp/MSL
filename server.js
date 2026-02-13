@@ -42,7 +42,7 @@ function validatePdf(filePath) {
       return false;
     }
     
-    const header = buffer.slice(0, 4).toString();
+    const header = buffer.slice(0, 4).toString('latin1');
     if (!header.startsWith('%PDF')) {
       console.error('❌ PDF validation failed: Invalid PDF header, got:', header);
       return false;
@@ -53,7 +53,7 @@ function validatePdf(filePath) {
       return false;
     }
     
-    const tail = buffer.slice(-10).toString();
+    const tail = buffer.slice(-10).toString('latin1');
     if (!tail.includes('%%EOF')) {
       console.warn('⚠️ PDF missing EOF marker, might be truncated');
     }
