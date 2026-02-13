@@ -9,7 +9,7 @@ lerna-debug.log*
 
 # Ignore node_modules
 node_modules/
-
+.env
 node_modules
 dist
 dist-ssr
