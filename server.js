@@ -22,20 +22,33 @@ const PORT = process.env.PORT || 3001;
 const storageDir = path.join(__dirname, 'storage');
 const templateManager = new TemplateManager(storageDir);
 
+// Allowed origins
+const allowedOrigins = [
+  'https://join.mslpakistan.org',
+  'https://mslpakistan.online',
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:3001'
+];
+
 // Enable CORS: allow join.mslpakistan.org for all endpoints (PDF, photo upload/fetch, API)
 app.use((req, res, next) => {
-  const allowedOrigin = process.env.NODE_ENV === 'production'
-    ? 'https://join.mslpakistan.org' 
-    : '*'; 
-  res.header('Access-Control-Allow-Origin', allowedOrigin); 
-  res.header('Vary', 'Origin'); 
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS'); 
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization'); 
-  res.header('Access-Control-Expose-Headers', 'Content-Disposition'); 
-  if (req.method === 'OPTIONS') { 
-    return res.sendStatus(200); 
-  } 
-  next(); 
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+  } else {
+    res.header('Access-Control-Allow-Origin', allowedOrigins[0]);
+  }
+  res.header('Vary', 'Origin');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Expose-Headers', 'Content-Disposition');
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+  next();
 }); 
 
 // Ensure uploads directory exists
@@ -55,14 +68,20 @@ if (!fs.existsSync(templateJsonPath)) {
   fs.writeFileSync(templateJsonPath, JSON.stringify({ basePdf: '', schemas: [[]] }, null, 2));
 }
 
-// Ensure CORS headers for static files (PDF, uploads, fonts)
+// Static CORS for uploads, fonts, templates
 const staticCORS = (req, res, next) => {
-  const allowedOrigin = process.env.NODE_ENV === 'production'
-    ? 'https://join.mslpakistan.org' 
-    : '*'; 
-  res.header('Access-Control-Allow-Origin', allowedOrigin); 
-  res.header('Vary', 'Origin'); 
-  next(); 
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+  } else {
+    res.header('Access-Control-Allow-Origin', allowedOrigins[0]);
+  }
+  res.header('Vary', 'Origin');
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+  next();
 }; 
 app.use('/uploads', staticCORS, express.static(uploadsDir)); 
 app.use('/storage/fonts', staticCORS, express.static(path.join(__dirname, 'storage', 'fonts'))); 
