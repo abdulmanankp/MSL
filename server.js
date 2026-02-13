@@ -37,20 +37,18 @@ app.use((req, res, next) => {
   // Allow requests from allowed origins
   if (allowedOrigins.includes(origin)) {
     res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
   } else if (process.env.NODE_ENV !== 'production') {
     // In development, allow all origins without credentials
     res.header('Access-Control-Allow-Origin', '*');
   }
+  // Note: In production, if origin is not in whitelist, no CORS header is set
+  // This causes browsers to block the response, which is the intended security behavior
   
   res.header('Vary', 'Origin');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   res.header('Access-Control-Expose-Headers', 'Content-Disposition');
-  
-  // Only set credentials header if origin is allowed
-  if (allowedOrigins.includes(origin)) {
-    res.header('Access-Control-Allow-Credentials', 'true');
-  }
   
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
@@ -82,18 +80,16 @@ const staticCORS = (req, res, next) => {
   // Allow requests from allowed origins
   if (allowedOrigins.includes(origin)) {
     res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
   } else if (process.env.NODE_ENV !== 'production') {
     // In development, allow all origins without credentials
     res.header('Access-Control-Allow-Origin', '*');
   }
+  // Note: In production, if origin is not in whitelist, no CORS header is set
+  // This causes browsers to block the response, which is the intended security behavior
   
   res.header('Vary', 'Origin');
   res.header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
-  
-  // Only set credentials header if origin is allowed
-  if (allowedOrigins.includes(origin)) {
-    res.header('Access-Control-Allow-Credentials', 'true');
-  }
   
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
