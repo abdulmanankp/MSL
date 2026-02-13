@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Upload, LogOut, Lock } from 'lucide-react';
 import type { Template } from '@pdfme/common';
+import { BLANK_PDF } from '@pdfme/common';
 import type { Designer } from '@pdfme/ui';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -39,8 +40,13 @@ const AVAILABLE_FIELDS: FieldConfig[] = [
   { key: 'qr_code', label: 'QR Code', type: 'image', shape: 'rectangle', width: 40, height: 40 },
 ];
 
+// The basePdf property must be one of:
+// - Uint8Array (recommended for loaded PDF data)
+// - ArrayBuffer (will be converted to Uint8Array)
+// - base64 string (data:application/pdf;base64,...)
+// - BLANK_PDF (for a blank template)
 const defaultTemplate: Template = {
-  basePdf: '', // Will be set after upload
+  basePdf: BLANK_PDF, // Use BLANK_PDF for a blank template by default
   schemas: [[]],
 };
 
@@ -116,15 +122,17 @@ const TemplateDesigner: React.FC = () => {
       try {
         // Create a copy for saving
         const templateForSaving = { ...templateToSave };
-        
-        // Store basePdf as URL reference instead of embedding to keep payload small
-        // This avoids 413 Payload Too Large errors
-        if (templateForSaving.basePdf instanceof Uint8Array || (typeof templateForSaving.basePdf === 'string' && templateForSaving.basePdf.startsWith('data:'))) {
-          // Keep the reference to the server URL instead of embedding
+        // Only save a URL for basePdf in the backend, but keep Uint8Array/base64/BLANK_PDF in the designer state
+        if (templateForSaving.basePdf instanceof Uint8Array || templateForSaving.basePdf instanceof ArrayBuffer) {
+          // Save as URL reference to avoid large payloads
           templateForSaving.basePdf = `${API_URL}/get-pdf-template`;
+        } else if (typeof templateForSaving.basePdf === 'string' && templateForSaving.basePdf.startsWith('data:application/pdf;base64,')) {
+          // Save as URL reference if base64
+          templateForSaving.basePdf = `${API_URL}/get-pdf-template`;
+        } else if (templateForSaving.basePdf === BLANK_PDF) {
+          // Save BLANK_PDF as is
+          templateForSaving.basePdf = BLANK_PDF;
         }
-        // Set basePdf to deployed URL if needed
-        templateForSaving.basePdf = `${API_URL}/get-pdf-template`;
         await fetch(`${API_URL}/save-template`, {
           method: 'POST',
           headers: {
@@ -168,20 +176,43 @@ const TemplateDesigner: React.FC = () => {
             }
           }
 
-          // If basePdf is a URL, fetch the actual PDF data for the designer
-          if (loadedTemplate.basePdf && typeof loadedTemplate.basePdf === 'string' && loadedTemplate.basePdf.includes('http')) {
-            try {
-              console.log('Fetching PDF data for designer...');
-              const pdfResponse = await fetch(loadedTemplate.basePdf, { mode: 'cors' });
-              if (pdfResponse.ok) {
-                const pdfBuffer = await pdfResponse.arrayBuffer();
-                loadedTemplate.basePdf = new Uint8Array(pdfBuffer);
-              } else {
-                console.error('Failed to fetch PDF data for designer, status:', pdfResponse.status);
+          // If basePdf is a string, handle base64 or URL
+          if (loadedTemplate.basePdf && typeof loadedTemplate.basePdf === 'string') {
+            if (loadedTemplate.basePdf.startsWith('data:application/pdf;base64,')) {
+              // Handle base64-encoded PDF
+              try {
+                const base64 = loadedTemplate.basePdf.split(',')[1];
+                const binary = atob(base64);
+                const len = binary.length;
+                const bytes = new Uint8Array(len);
+                for (let i = 0; i < len; i++) {
+                  bytes[i] = binary.charCodeAt(i);
+                }
+                loadedTemplate.basePdf = bytes;
+                console.log('Converted base64 PDF to Uint8Array for designer, size:', bytes.length);
+              } catch (err) {
+                console.error('Failed to convert base64 PDF for designer:', err);
               }
-            } catch (error) {
-              console.error('Error fetching PDF data for designer:', error);
+            } else if (loadedTemplate.basePdf.includes('http')) {
+              try {
+                console.log('Fetching PDF data for designer...');
+                const pdfResponse = await fetch(loadedTemplate.basePdf, { mode: 'cors' });
+                if (pdfResponse.ok) {
+                  const pdfBuffer = await pdfResponse.arrayBuffer();
+                  loadedTemplate.basePdf = new Uint8Array(pdfBuffer);
+                  console.log('Fetched and converted PDF for designer, size:', loadedTemplate.basePdf.length);
+                } else {
+                  console.error('Failed to fetch PDF data for designer, status:', pdfResponse.status);
+                }
+              } catch (error) {
+                console.error('Error fetching PDF data for designer:', error);
+              }
             }
+          }
+          // If basePdf is an ArrayBuffer, convert to Uint8Array
+          if (loadedTemplate.basePdf && loadedTemplate.basePdf instanceof ArrayBuffer) {
+            loadedTemplate.basePdf = new Uint8Array(loadedTemplate.basePdf);
+            console.log('Converted ArrayBuffer PDF to Uint8Array for designer, size:', loadedTemplate.basePdf.length);
           }
           // Normalize existing schema fields:
           try {
@@ -294,15 +325,12 @@ const TemplateDesigner: React.FC = () => {
       });
 
       if (response.ok) {
-        const data = await response.json();
-        // Use the correct endpoint with proper CORS headers
+        // After upload, fetch the PDF as binary and set as Uint8Array
         const pdfUrl = `${API_URL}/get-pdf-template`;
-        // Verify the PDF is accessible with CORS
-        const pdfResponse = await fetch(pdfUrl, {
-          mode: 'cors',
-        });
+        const pdfResponse = await fetch(pdfUrl, { mode: 'cors' });
         if (pdfResponse.ok) {
-          setTemplate((prev) => ({ ...prev, basePdf: pdfUrl }));
+          const pdfBuffer = await pdfResponse.arrayBuffer();
+          setTemplate((prev) => ({ ...prev, basePdf: new Uint8Array(pdfBuffer) }));
           alert('PDF uploaded and saved successfully!');
         } else {
           console.error('Failed to fetch PDF with CORS:', pdfResponse.status);

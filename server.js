@@ -895,15 +895,12 @@ app.use('/fonts', (req, res, next) => {
 app.use('/fonts', express.static(fontsDir));
 
 // Get PDF template endpoint
-app.get('/get-pdf-template', async (req, res) => {
-  try {
-    // Assuming template is stored as 'templates/template.pdf' in S3
-    const key = 'templates/template.pdf';
-    const url = await getPresignedUrl(key, 60 * 10); // 10 min expiry
-    res.json({ url });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to generate S3 download URL', details: err.message });
+app.get('/get-pdf-template', (req, res) => {
+  const pdfPath = path.join(__dirname, 'storage', 'template', 'template.pdf');
+  if (!fs.existsSync(pdfPath)) {
+    return res.status(404).json({ error: 'Template PDF not found' });
   }
+  res.sendFile(pdfPath);
 });
 
 

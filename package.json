@@ -26,6 +26,7 @@
     "@aws-sdk/lib-storage": "^3.989.0",
     "@aws-sdk/s3-request-presigner": "^3.989.0",
     "@hookform/resolvers": "^3.10.0",
+    "@pdfme/common": "^5.5.8",
     "@pdfme/generator": "^5.5.8",
     "@pdfme/schemas": "^5.5.8",
     "@pdfme/ui": "^5.5.8",
