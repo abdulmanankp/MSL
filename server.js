@@ -27,6 +27,52 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Constants for PDF validation
+const PDF_EOF_CHECK_BYTES = 10; // Number of bytes to check for EOF marker
+
+// PDF validation function
+function validatePdf(filePath) {
+  try {
+    if (!fs.existsSync(filePath)) {
+      console.error('❌ PDF validation failed: File does not exist:', filePath);
+      return false;
+    }
+    
+    const buffer = fs.readFileSync(filePath);
+    
+    if (buffer.length < 4) {
+      console.error('❌ PDF validation failed: File too small (< 4 bytes)');
+      return false;
+    }
+    
+    // Use 'latin1' encoding to read binary data as single-byte characters
+    // This ensures the PDF magic bytes (%PDF) are read correctly without UTF-8 interpretation
+    const header = buffer.slice(0, 4).toString('latin1');
+    if (!header.startsWith('%PDF')) {
+      console.error('❌ PDF validation failed: Invalid PDF header, got:', header);
+      return false;
+    }
+    
+    if (buffer.length < 1024) {
+      console.error('❌ PDF validation failed: File too small (< 1KB)');
+      return false;
+    }
+    
+    // Check for EOF marker using latin1 encoding for binary data
+    const tail = buffer.slice(-PDF_EOF_CHECK_BYTES).toString('latin1');
+    if (!tail.includes('%%EOF')) {
+      console.warn('⚠️ PDF missing EOF marker, might be truncated');
+    }
+    
+    console.log('✅ PDF validation passed:', filePath, buffer.length, 'bytes');
+    return true;
+  } catch (error) {
+    console.error('❌ PDF validation error:', error);
+    return false;
+  }
+}
+
+
 // S3 pre-signed upload endpoint (now after app initialization)
 app.post('/get-presigned-photo-upload', express.json(), async (req, res) => {
   try {
@@ -774,18 +820,33 @@ app.post('/upload', upload.single('photo'), (req, res) => {
 
 // PDF template upload endpoint
 app.post('/upload-template', pdfUpload.single('template'), (req, res) => {
-  console.log('PDF upload request received');
+  console.log('📤 PDF upload request received');
   console.log('File:', req.file);
   console.log('Body:', req.body);
   
   if (!req.file) {
-    console.log('No file uploaded');
+    console.log('❌ No file uploaded');
     return res.status(400).json({ error: 'No PDF file uploaded' });
   }
+  
+  // Validate the uploaded PDF
+  const uploadedPath = req.file.path;
+  if (!validatePdf(uploadedPath)) {
+    console.error('❌ Uploaded PDF is invalid or corrupted');
+    // Delete invalid file
+    try {
+      fs.unlinkSync(uploadedPath);
+      console.log('🗑️ Deleted invalid PDF file');
+    } catch (err) {
+      console.error('Error deleting invalid file:', err);
+    }
+    return res.status(400).json({ error: 'Invalid or corrupted PDF file' });
+  }
+  
   // Return the URL to access the PDF
   const baseUrl = process.env.API_URL || `http://localhost:${PORT}`;
   const fileUrl = `${baseUrl}/get-pdf-template`;
-  console.log('File uploaded successfully:', fileUrl);
+  console.log('✅ Valid PDF uploaded successfully:', fileUrl);
   res.json({ url: fileUrl });
 });
 
@@ -897,9 +958,26 @@ app.use('/fonts', express.static(fontsDir));
 // Get PDF template endpoint
 app.get('/get-pdf-template', (req, res) => {
   const pdfPath = path.join(__dirname, 'storage', 'template', 'template.pdf');
+  
+  console.log('📥 PDF template request received');
+  
   if (!fs.existsSync(pdfPath)) {
+    console.error('❌ Template PDF not found:', pdfPath);
     return res.status(404).json({ error: 'Template PDF not found' });
   }
+  
+  // Validate PDF before sending
+  if (!validatePdf(pdfPath)) {
+    console.error('❌ Template PDF is invalid or corrupted');
+    return res.status(500).json({ error: 'Template PDF is invalid or corrupted' });
+  }
+  
+  // Add cache control headers to prevent stale PDFs
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  
+  console.log('✅ Sending valid PDF template');
   res.sendFile(pdfPath);
 });
 
