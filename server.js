@@ -27,6 +27,9 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Constants for PDF validation
+const PDF_EOF_CHECK_BYTES = 10; // Number of bytes to check for EOF marker
+
 // PDF validation function
 function validatePdf(filePath) {
   try {
@@ -42,6 +45,8 @@ function validatePdf(filePath) {
       return false;
     }
     
+    // Use 'latin1' encoding to read binary data as single-byte characters
+    // This ensures the PDF magic bytes (%PDF) are read correctly without UTF-8 interpretation
     const header = buffer.slice(0, 4).toString('latin1');
     if (!header.startsWith('%PDF')) {
       console.error('❌ PDF validation failed: Invalid PDF header, got:', header);
@@ -53,7 +58,8 @@ function validatePdf(filePath) {
       return false;
     }
     
-    const tail = buffer.slice(-10).toString('latin1');
+    // Check for EOF marker using latin1 encoding for binary data
+    const tail = buffer.slice(-PDF_EOF_CHECK_BYTES).toString('latin1');
     if (!tail.includes('%%EOF')) {
       console.warn('⚠️ PDF missing EOF marker, might be truncated');
     }

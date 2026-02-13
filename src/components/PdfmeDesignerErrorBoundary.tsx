@@ -24,10 +24,10 @@ class PdfmeDesignerErrorBoundary extends Component<Props, State> {
     };
   }
 
-  static getDerivedStateFromError(error: Error): Partial<State> {
+  static getDerivedStateFromError(_error: Error): Partial<State> {
+    // Only return hasError flag here, error object will be set in componentDidCatch
     return {
       hasError: true,
-      error,
     };
   }
 

@@ -42,23 +42,21 @@ const AVAILABLE_FIELDS: FieldConfig[] = [
 ];
 
 // Helper function to validate PDF data
-const isPdfValid = async (data: Uint8Array): Promise<boolean> => {
+const isPdfValid = (data: Uint8Array): boolean => {
   try {
     if (data.length < 4) {
       console.error('❌ PDF validation failed: File too small (< 4 bytes)');
       return false;
     }
-    // Use Array.from for safer conversion of potentially large arrays
-    const headerBytes = Array.from(data.slice(0, 4));
-    const header = String.fromCharCode(...headerBytes);
+    // Uint8Array.slice() returns a typed array that can be safely spread
+    const header = String.fromCharCode(...data.slice(0, 4));
     if (!header.startsWith('%PDF')) {
       console.error('❌ PDF validation failed: Invalid PDF header, got:', header);
       return false;
     }
     
-    // Use Array.from for safer conversion of tail bytes
-    const tailBytes = Array.from(data.slice(-10));
-    const tail = String.fromCharCode(...tailBytes);
+    // Check for EOF marker
+    const tail = String.fromCharCode(...data.slice(-10));
     if (!tail.includes('%%EOF')) {
       console.warn('⚠️ PDF missing EOF marker, might be truncated');
     }
@@ -208,7 +206,7 @@ const TemplateDesigner: React.FC = () => {
               }
               
               // Validate converted PDF
-              const isValid = await isPdfValid(arr);
+              const isValid = isPdfValid(arr);
               if (isValid) {
                 loadedTemplate.basePdf = arr;
                 console.log('✅ Converted serialized basePdf object to Uint8Array for designer, size:', arr.length);
@@ -239,7 +237,7 @@ const TemplateDesigner: React.FC = () => {
                 }
                 
                 // Validate converted PDF
-                const isValid = await isPdfValid(bytes);
+                const isValid = isPdfValid(bytes);
                 if (isValid) {
                   loadedTemplate.basePdf = bytes;
                   console.log('✅ Converted base64 PDF to Uint8Array for designer, size:', bytes.length);
@@ -271,7 +269,8 @@ const TemplateDesigner: React.FC = () => {
                   } catch (fetchError) {
                     retryCount++;
                     if (retryCount < maxRetries) {
-                      const delay = 500 * retryCount;
+                      // Exponential backoff: 500ms, 1000ms, 2000ms
+                      const delay = Math.pow(2, retryCount - 1) * 500;
                       console.warn(`⚠️ Fetch attempt ${retryCount} failed, retrying in ${delay}ms...`);
                       await new Promise(resolve => setTimeout(resolve, delay));
                     } else {
@@ -285,7 +284,7 @@ const TemplateDesigner: React.FC = () => {
                   const pdfBytes = new Uint8Array(pdfBuffer);
                   
                   // Validate fetched PDF
-                  const isValid = await isPdfValid(pdfBytes);
+                  const isValid = isPdfValid(pdfBytes);
                   if (isValid) {
                     loadedTemplate.basePdf = pdfBytes;
                     console.log('✅ Fetched and converted PDF for designer, size:', pdfBytes.length);
@@ -315,7 +314,7 @@ const TemplateDesigner: React.FC = () => {
             const bytes = new Uint8Array(loadedTemplate.basePdf);
             
             // Validate converted PDF
-            const isValid = await isPdfValid(bytes);
+            const isValid = isPdfValid(bytes);
             if (isValid) {
               loadedTemplate.basePdf = bytes;
               console.log('✅ Converted ArrayBuffer PDF to Uint8Array for designer, size:', bytes.length);
@@ -458,7 +457,8 @@ const TemplateDesigner: React.FC = () => {
           } catch (fetchError) {
             retryCount++;
             if (retryCount < maxRetries) {
-              const delay = 500 * retryCount;
+              // Exponential backoff: 500ms, 1000ms, 2000ms
+              const delay = Math.pow(2, retryCount - 1) * 500;
               console.warn(`⚠️ Fetch attempt ${retryCount} failed, retrying in ${delay}ms...`);
               await new Promise(resolve => setTimeout(resolve, delay));
             } else {
@@ -472,7 +472,7 @@ const TemplateDesigner: React.FC = () => {
           const pdfBytes = new Uint8Array(pdfBuffer);
           
           // Validate fetched PDF
-          const isValid = await isPdfValid(pdfBytes);
+          const isValid = isPdfValid(pdfBytes);
           if (isValid) {
             setTemplate((prev) => ({ ...prev, basePdf: pdfBytes }));
             toast.success('PDF uploaded and saved successfully!');
