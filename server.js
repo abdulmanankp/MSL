@@ -22,18 +22,35 @@ const PORT = process.env.PORT || 3001;
 const storageDir = path.join(__dirname, 'storage');
 const templateManager = new TemplateManager(storageDir);
 
-// Enable CORS
+// Enable CORS: allow join.mslpakistan.org for all endpoints (PDF, photo upload/fetch, API)
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
+  const allowedOrigin = process.env.NODE_ENV === 'production'
+    ? 'https://join.mslpakistan.org'
+    : '*';
+  res.header('Access-Control-Allow-Origin', allowedOrigin);
+  res.header('Vary', 'Origin');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Expose-Headers', 'Content-Disposition');
   if (req.method === 'OPTIONS') {
-    res.sendStatus(200);
-  } else {
-    next();
+    return res.sendStatus(200);
   }
+  next();
 });
 
+// Ensure CORS headers for static files (PDF, uploads, fonts)
+const staticCORS = (req, res, next) => {
+  const allowedOrigin = process.env.NODE_ENV === 'production'
+    ? 'https://join.mslpakistan.org'
+    : '*';
+  res.header('Access-Control-Allow-Origin', allowedOrigin);
+  res.header('Vary', 'Origin');
+  next();
+};
+app.use('/uploads', staticCORS, express.static(uploadsDir));
+app.use('/storage/fonts', staticCORS, express.static(path.join(__dirname, 'storage', 'fonts')));
+app.use('/fonts', staticCORS, express.static(path.join(__dirname, 'storage', 'fonts')));
+app.use('/templates', staticCORS, express.static(path.join(__dirname, 'storage', 'template')));
 // Parse JSON bodies with increased limit for large templates with embedded PDFs
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
