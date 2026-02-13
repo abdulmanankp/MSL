@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import PdfmeDesignerWrapper from '@/components/PdfmeDesignerWrapper';
+import PdfmeDesignerErrorBoundary from '@/components/PdfmeDesignerErrorBoundary';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -39,6 +40,32 @@ const AVAILABLE_FIELDS: FieldConfig[] = [
   { key: 'profile_photo', label: 'Profile Photo', type: 'image', shape: 'circle', border: true },
   { key: 'qr_code', label: 'QR Code', type: 'image', shape: 'rectangle', width: 40, height: 40 },
 ];
+
+// Helper function to validate PDF data
+const isPdfValid = async (data: Uint8Array): Promise<boolean> => {
+  try {
+    if (data.length < 4) {
+      console.error('❌ PDF validation failed: File too small (< 4 bytes)');
+      return false;
+    }
+    const header = String.fromCharCode(...data.slice(0, 4));
+    if (!header.startsWith('%PDF')) {
+      console.error('❌ PDF validation failed: Invalid PDF header, got:', header);
+      return false;
+    }
+    
+    const tail = String.fromCharCode(...data.slice(-10));
+    if (!tail.includes('%%EOF')) {
+      console.warn('⚠️ PDF missing EOF marker, might be truncated');
+    }
+    
+    console.log('✅ PDF validation passed:', data.length, 'bytes');
+    return true;
+  } catch (error) {
+    console.error('❌ PDF validation error:', error);
+    return false;
+  }
+};
 
 // The basePdf property must be one of:
 // - Uint8Array (recommended for loaded PDF data)
@@ -153,11 +180,17 @@ const TemplateDesigner: React.FC = () => {
   useEffect(() => {
     const loadTemplate = async () => {
       try {
+        console.log('🔄 Loading template from server...');
         const response = await fetch(`${API_URL}/load-template`, {
           mode: 'cors',
         });
         if (response.ok) {
           const loadedTemplate = await response.json();
+          console.log('📥 Template loaded from server:', { 
+            hasPdf: !!loadedTemplate.basePdf, 
+            pdfType: typeof loadedTemplate.basePdf,
+            schemasCount: loadedTemplate.schemas?.length 
+          });
 
           // Normalize basePdf formats for the designer
           // If basePdf is an object with numeric keys (serialized Uint8Array), convert it
@@ -169,10 +202,21 @@ const TemplateDesigner: React.FC = () => {
               for (let i = 0; i < keys.length; i++) {
                 arr[i] = obj[String(keys[i])];
               }
-              loadedTemplate.basePdf = arr;
-              console.log('Converted serialized basePdf object to Uint8Array for designer, size:', arr.length);
+              
+              // Validate converted PDF
+              const isValid = await isPdfValid(arr);
+              if (isValid) {
+                loadedTemplate.basePdf = arr;
+                console.log('✅ Converted serialized basePdf object to Uint8Array for designer, size:', arr.length);
+              } else {
+                console.error('❌ Converted PDF is invalid, using BLANK_PDF');
+                loadedTemplate.basePdf = BLANK_PDF;
+                toast.error('Loaded PDF is invalid. Using blank template instead.');
+              }
             } catch (err) {
-              console.error('Failed to convert serialized basePdf for designer:', err);
+              console.error('❌ Failed to convert serialized basePdf for designer:', err);
+              loadedTemplate.basePdf = BLANK_PDF;
+              toast.error('Failed to convert PDF data. Using blank template instead.');
             }
           }
 
@@ -181,6 +225,7 @@ const TemplateDesigner: React.FC = () => {
             if (loadedTemplate.basePdf.startsWith('data:application/pdf;base64,')) {
               // Handle base64-encoded PDF
               try {
+                console.log('🔄 Converting base64 PDF to Uint8Array...');
                 const base64 = loadedTemplate.basePdf.split(',')[1];
                 const binary = atob(base64);
                 const len = binary.length;
@@ -188,32 +233,95 @@ const TemplateDesigner: React.FC = () => {
                 for (let i = 0; i < len; i++) {
                   bytes[i] = binary.charCodeAt(i);
                 }
-                loadedTemplate.basePdf = bytes;
-                console.log('Converted base64 PDF to Uint8Array for designer, size:', bytes.length);
+                
+                // Validate converted PDF
+                const isValid = await isPdfValid(bytes);
+                if (isValid) {
+                  loadedTemplate.basePdf = bytes;
+                  console.log('✅ Converted base64 PDF to Uint8Array for designer, size:', bytes.length);
+                } else {
+                  console.error('❌ Base64 PDF is invalid, using BLANK_PDF');
+                  loadedTemplate.basePdf = BLANK_PDF;
+                  toast.error('Loaded PDF is corrupted. Using blank template instead.');
+                }
               } catch (err) {
-                console.error('Failed to convert base64 PDF for designer:', err);
+                console.error('❌ Failed to convert base64 PDF for designer:', err);
+                loadedTemplate.basePdf = BLANK_PDF;
+                toast.error('Failed to decode PDF data. Using blank template instead.');
               }
             } else if (loadedTemplate.basePdf.includes('http')) {
+              // Handle URL with retry logic
               try {
-                console.log('Fetching PDF data for designer...');
-                const pdfResponse = await fetch(loadedTemplate.basePdf, { mode: 'cors' });
-                if (pdfResponse.ok) {
+                console.log('🔄 Fetching PDF data from URL with retry logic...');
+                const pdfUrl = loadedTemplate.basePdf;
+                let pdfResponse: Response | null = null;
+                let retryCount = 0;
+                const maxRetries = 3;
+
+                while (retryCount < maxRetries && !pdfResponse?.ok) {
+                  try {
+                    pdfResponse = await fetch(pdfUrl, { mode: 'cors', cache: 'no-cache' });
+                    if (!pdfResponse.ok) {
+                      throw new Error(`HTTP ${pdfResponse.status}`);
+                    }
+                  } catch (fetchError) {
+                    retryCount++;
+                    if (retryCount < maxRetries) {
+                      const delay = 500 * retryCount;
+                      console.warn(`⚠️ Fetch attempt ${retryCount} failed, retrying in ${delay}ms...`);
+                      await new Promise(resolve => setTimeout(resolve, delay));
+                    } else {
+                      throw fetchError;
+                    }
+                  }
+                }
+
+                if (pdfResponse?.ok) {
                   const pdfBuffer = await pdfResponse.arrayBuffer();
-                  loadedTemplate.basePdf = new Uint8Array(pdfBuffer);
-                  console.log('Fetched and converted PDF for designer, size:', loadedTemplate.basePdf.length);
+                  const pdfBytes = new Uint8Array(pdfBuffer);
+                  
+                  // Validate fetched PDF
+                  const isValid = await isPdfValid(pdfBytes);
+                  if (isValid) {
+                    loadedTemplate.basePdf = pdfBytes;
+                    console.log('✅ Fetched and converted PDF for designer, size:', pdfBytes.length);
+                  } else {
+                    console.error('❌ Fetched PDF is invalid, using BLANK_PDF');
+                    loadedTemplate.basePdf = BLANK_PDF;
+                    toast.error('Fetched PDF is corrupted. Using blank template instead.');
+                  }
                 } else {
-                  console.error('Failed to fetch PDF data for designer, status:', pdfResponse.status);
+                  console.error('❌ Failed to fetch PDF after retries');
+                  loadedTemplate.basePdf = BLANK_PDF;
+                  toast.error('Failed to fetch PDF from server. Using blank template instead.');
                 }
               } catch (error) {
-                console.error('Error fetching PDF data for designer:', error);
+                console.error('❌ Error fetching PDF data for designer:', error);
+                const msg = error instanceof Error ? error.message : String(error);
+                loadedTemplate.basePdf = BLANK_PDF;
+                toast.error(`Failed to fetch PDF: ${msg}. Using blank template instead.`);
               }
+            } else if (loadedTemplate.basePdf === BLANK_PDF) {
+              // Already BLANK_PDF, no conversion needed
+              console.log('📄 Using BLANK_PDF template');
             }
           }
           // If basePdf is an ArrayBuffer, convert to Uint8Array
           if (loadedTemplate.basePdf && loadedTemplate.basePdf instanceof ArrayBuffer) {
-            loadedTemplate.basePdf = new Uint8Array(loadedTemplate.basePdf);
-            console.log('Converted ArrayBuffer PDF to Uint8Array for designer, size:', loadedTemplate.basePdf.length);
+            const bytes = new Uint8Array(loadedTemplate.basePdf);
+            
+            // Validate converted PDF
+            const isValid = await isPdfValid(bytes);
+            if (isValid) {
+              loadedTemplate.basePdf = bytes;
+              console.log('✅ Converted ArrayBuffer PDF to Uint8Array for designer, size:', bytes.length);
+            } else {
+              console.error('❌ ArrayBuffer PDF is invalid, using BLANK_PDF');
+              loadedTemplate.basePdf = BLANK_PDF;
+              toast.error('PDF data is invalid. Using blank template instead.');
+            }
           }
+          
           // Normalize existing schema fields:
           try {
             if (Array.isArray(loadedTemplate.schemas)) {
@@ -241,16 +349,20 @@ const TemplateDesigner: React.FC = () => {
               });
             }
           } catch (err) {
-            console.warn('Failed to normalize template schemas:', err);
+            console.warn('⚠️ Failed to normalize template schemas:', err);
           }
 
           setTemplate(loadedTemplate);
           stableTemplateRef.current = loadedTemplate;
+          console.log('✅ Template successfully loaded and validated');
+        } else {
+          console.error('❌ Failed to load template from server, status:', response.status);
+          toast.error(`Failed to load template from server (HTTP ${response.status})`);
         }
       } catch (error) {
-        console.error('Error loading template:', error);
+        console.error('❌ Error loading template:', error);
         const msg = error instanceof Error ? error.message : String(error);
-        toast.error(`Failed to load template: ${msg}. Ensure the template server is running at http://localhost:3001`);
+        toast.error(`Failed to load template: ${msg}`);
       } finally {
         setIsLoading(false);
       }
@@ -310,6 +422,7 @@ const TemplateDesigner: React.FC = () => {
     if (!file) return;
     setPdfFile(file);
 
+    console.log('📤 Uploading PDF to server...');
     // Upload PDF to server
     const formData = new FormData();
     formData.append('template', file);
@@ -325,24 +438,58 @@ const TemplateDesigner: React.FC = () => {
       });
 
       if (response.ok) {
-        // After upload, fetch the PDF as binary and set as Uint8Array
+        console.log('✅ PDF uploaded successfully');
+        // After upload, fetch the PDF as binary and set as Uint8Array with retry logic
         const pdfUrl = `${API_URL}/get-pdf-template`;
-        const pdfResponse = await fetch(pdfUrl, { mode: 'cors' });
-        if (pdfResponse.ok) {
+        let pdfResponse: Response | null = null;
+        let retryCount = 0;
+        const maxRetries = 3;
+
+        while (retryCount < maxRetries && !pdfResponse?.ok) {
+          try {
+            pdfResponse = await fetch(pdfUrl, { mode: 'cors', cache: 'no-cache' });
+            if (!pdfResponse.ok) {
+              throw new Error(`HTTP ${pdfResponse.status}`);
+            }
+          } catch (fetchError) {
+            retryCount++;
+            if (retryCount < maxRetries) {
+              const delay = 500 * retryCount;
+              console.warn(`⚠️ Fetch attempt ${retryCount} failed, retrying in ${delay}ms...`);
+              await new Promise(resolve => setTimeout(resolve, delay));
+            } else {
+              throw fetchError;
+            }
+          }
+        }
+
+        if (pdfResponse?.ok) {
           const pdfBuffer = await pdfResponse.arrayBuffer();
-          setTemplate((prev) => ({ ...prev, basePdf: new Uint8Array(pdfBuffer) }));
-          alert('PDF uploaded and saved successfully!');
+          const pdfBytes = new Uint8Array(pdfBuffer);
+          
+          // Validate fetched PDF
+          const isValid = await isPdfValid(pdfBytes);
+          if (isValid) {
+            setTemplate((prev) => ({ ...prev, basePdf: pdfBytes }));
+            toast.success('PDF uploaded and saved successfully!');
+            console.log('✅ PDF loaded and validated, size:', pdfBytes.length);
+          } else {
+            console.error('❌ Uploaded PDF is invalid');
+            toast.error('Uploaded PDF is corrupted or invalid. Please try a different file.');
+          }
         } else {
-          console.error('Failed to fetch PDF with CORS:', pdfResponse.status);
-          alert('PDF uploaded but failed to load. Please try again.');
+          console.error('❌ Failed to fetch uploaded PDF, status:', pdfResponse?.status);
+          toast.error('PDF uploaded but failed to load. Please try again.');
         }
       } else {
-        console.error('Upload failed:', response.status);
-        alert('Failed to upload PDF');
+        console.error('❌ Upload failed, status:', response.status);
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        toast.error(`Failed to upload PDF: ${errorData.error || 'Server error'}`);
       }
     } catch (error) {
-      console.error('Upload error:', error);
-      alert('Failed to upload PDF');
+      console.error('❌ Upload error:', error);
+      const msg = error instanceof Error ? error.message : String(error);
+      toast.error(`Failed to upload PDF: ${msg}`);
     }
   };
 
@@ -417,10 +564,12 @@ const TemplateDesigner: React.FC = () => {
         mode: 'cors',
         body: JSON.stringify({ template }),
       });
-      alert('Template saved successfully!');
+      toast.success('Template saved successfully!');
+      console.log('✅ Template manually saved');
     } catch (error) {
-      console.error('Error saving template:', error);
-      alert('Failed to save template');
+      console.error('❌ Error saving template:', error);
+      const msg = error instanceof Error ? error.message : String(error);
+      toast.error(`Failed to save template: ${msg}`);
     } finally {
       setIsSaving(false);
     }
@@ -510,17 +659,19 @@ const TemplateDesigner: React.FC = () => {
                   </div>
                 </div>
               ) : (
-                <PdfmeDesignerWrapper
-                  template={template}
-                  onChangeTemplate={setTemplate}
-                  onFieldDrop={handleFieldDrop}
-                  options={{ 
-                    zoomLevel: 1, 
-                    sidebarOpen: true,
-                    ...uiFontOptions
-                  }}
-                  designerRef={designerRef}
-                />
+                <PdfmeDesignerErrorBoundary onReset={() => window.location.reload()}>
+                  <PdfmeDesignerWrapper
+                    template={template}
+                    onChangeTemplate={setTemplate}
+                    onFieldDrop={handleFieldDrop}
+                    options={{ 
+                      zoomLevel: 1, 
+                      sidebarOpen: true,
+                      ...uiFontOptions
+                    }}
+                    designerRef={designerRef}
+                  />
+                </PdfmeDesignerErrorBoundary>
               )}
             </div>
           </div>
