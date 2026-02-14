@@ -33,7 +33,8 @@ app.use((req, res, next) => {
       "script-src 'self' blob:;",
       "style-src 'self' 'unsafe-inline';",
       "img-src 'self' data: blob:;",
-      "font-src 'self' data:;"
+      "font-src 'self' data:;",
+      "connect-src 'self' https://mslpakistan.online https://ugjlaalllfthxngfzvxh.supabase.co blob:;"
     ].join(' ')
   );
   next();
