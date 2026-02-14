@@ -47,18 +47,26 @@ const allowedOrigins = [
   'http://localhost:3001',
   'http://127.0.0.1:3000',
   'http://127.0.0.1:3001'
-
-  
 ];
+
+// Use dynamic CORS to allow all allowedOrigins
 app.use(cors({
-  origin: "https://join.mslpakistan.org",
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, etc.)
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
-// Enable CORS: allow join.mslpakistan.org for all endpoints (PDF, photo upload/fetch, API)
+
+// Custom CORS headers for legacy/fine-grained control
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
-    res.header('Access-Control-Allow-Origin', origin);
+  if (!origin || allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin || allowedOrigins[0]);
     res.header('Access-Control-Allow-Credentials', 'true');
   } else {
     res.header('Access-Control-Allow-Origin', allowedOrigins[0]);
@@ -71,7 +79,7 @@ app.use((req, res, next) => {
     return res.status(204).end();
   }
   next();
-}); 
+});
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, 'public', 'uploads');
@@ -90,25 +98,10 @@ if (!fs.existsSync(templateJsonPath)) {
   fs.writeFileSync(templateJsonPath, JSON.stringify({ basePdf: '', schemas: [[]] }, null, 2));
 }
 
-// Static CORS for uploads, fonts, templates
-const staticCORS = (req, res, next) => {
-  const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
-    res.header('Access-Control-Allow-Origin', origin);
-    res.header('Access-Control-Allow-Credentials', 'true');
-  } else {
-    res.header('Access-Control-Allow-Origin', allowedOrigins[0]);
-  }
-  res.header('Vary', 'Origin');
-  if (req.method === 'OPTIONS') {
-    return res.status(204).end();
-  }
-  next();
-}; 
-app.use('/uploads', staticCORS, express.static(uploadsDir)); 
-app.use('/storage/fonts', staticCORS, express.static(path.join(__dirname, 'storage', 'fonts'))); 
-app.use('/fonts', staticCORS, express.static(path.join(__dirname, 'storage', 'fonts'))); 
-app.use('/templates', staticCORS, express.static(path.join(__dirname, 'storage', 'template'))); 
+
+// Serve all static files from public directory (including /uploads, /fonts, etc.)
+app.use(express.static(path.join(__dirname, 'public')));
+
 // Parse JSON bodies with increased limit for large templates with embedded PDFs
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -388,7 +381,7 @@ app.post('/whatsapp/notify-approval', express.json(), async (req, res) => {
   if (!phone) return res.status(400).json({ error: 'phone is required' });
   try {
     const settingsPath = path.join(__dirname, 'storage', 'whatsapp_settings.json');
-    let settings = { whatsapp_enabled: true, downloads_per_week: 1 };
+    let settings = { whatsapp_enabled: true, downloads_per_week: 2};
     try {
       if (fs.existsSync(settingsPath)) {
         settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
