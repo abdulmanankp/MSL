@@ -99,6 +99,14 @@ if (!fs.existsSync(templateJsonPath)) {
 // Serve all static files from public directory (including /uploads, /fonts, etc.)
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Force correct Content-Type for .js files (fixes module script MIME error)
+app.use((req, res, next) => {
+  if (req.path.endsWith('.js')) {
+    res.type('application/javascript');
+  }
+  next();
+});
+
 // Parse JSON bodies with increased limit for large templates with embedded PDFs
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
