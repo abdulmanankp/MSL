@@ -102,7 +102,7 @@ const TemplateDesigner: React.FC = () => {
   useEffect(() => {
     stableTemplateRef.current = template;
   }, [template]);
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+  const API_URL = import.meta.env.VITE_API_URL || '/';
   const designerRef = useRef<Designer | null>(null);
 
   // Debounced save function
@@ -121,11 +121,11 @@ const TemplateDesigner: React.FC = () => {
         // This avoids 413 Payload Too Large errors
         if (templateForSaving.basePdf instanceof Uint8Array || (typeof templateForSaving.basePdf === 'string' && templateForSaving.basePdf.startsWith('data:'))) {
           // Keep the reference to the server URL instead of embedding
-          templateForSaving.basePdf = 'http://localhost:3001/get-pdf-template';
+          templateForSaving.basePdf = `${API_URL}get-pdf-template`;
         }
         // Set basePdf to deployed URL if needed
         templateForSaving.basePdf = `${API_URL}/get-pdf-template`;
-        await fetch(`${API_URL}/save-template`, {
+        await fetch(`${API_URL}save-template`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -145,7 +145,7 @@ const TemplateDesigner: React.FC = () => {
   useEffect(() => {
     const loadTemplate = async () => {
       try {
-        const response = await fetch(`${API_URL}/load-template`, {
+        const response = await fetch(`${API_URL}load-template`, {
           mode: 'cors',
         });
         if (response.ok) {
@@ -284,7 +284,7 @@ const TemplateDesigner: React.FC = () => {
     formData.append('template', file);
 
     try {
-      const response = await fetch('http://localhost:3001/upload-template', {
+      const response = await fetch(`${API_URL}upload-template`, {
         method: 'POST',
         body: formData,
         mode: 'cors',
@@ -296,7 +296,7 @@ const TemplateDesigner: React.FC = () => {
       if (response.ok) {
         const data = await response.json();
         // Use the correct endpoint with proper CORS headers
-        const pdfUrl = 'http://localhost:3001/get-pdf-template';
+        const pdfUrl = `${API_URL}get-pdf-template`;
         // Verify the PDF is accessible with CORS
         const pdfResponse = await fetch(pdfUrl, {
           mode: 'cors',
@@ -381,7 +381,7 @@ const TemplateDesigner: React.FC = () => {
   const handleManualSave = async () => {
     setIsSaving(true);
     try {
-      await fetch('http://localhost:3001/save-template', {
+      await fetch(`${API_URL}save-template`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

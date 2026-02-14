@@ -39,47 +39,44 @@ app.use((req, res, next) => {
   next();
 });
 
-// Allowed origins
-const allowedOrigins = [
-  'https://join.mslpakistan.org',
-  'https://mslpakistan.online',
-  'http://localhost:3000',
-  'http://localhost:3001',
-  'http://127.0.0.1:3000',
-  'http://127.0.0.1:3001'
-];
 
-// Use dynamic CORS to allow all allowedOrigins
-app.use(cors({
-  origin: function(origin, callback) {
-    // Allow requests with no origin (like mobile apps, curl, etc.)
+// CORS: Only enable in development (localhost)
+if (process.env.NODE_ENV !== 'production') {
+  const allowedOrigins = [
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:3001'
+  ];
+  app.use(cors({
+    origin: function(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true
+  }));
+  // Custom CORS headers for dev
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
     if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
+      res.header('Access-Control-Allow-Origin', origin || allowedOrigins[0]);
+      res.header('Access-Control-Allow-Credentials', 'true');
     } else {
-      callback(new Error('Not allowed by CORS'));
+      res.header('Access-Control-Allow-Origin', allowedOrigins[0]);
     }
-  },
-  credentials: true
-}));
-
-// Custom CORS headers for legacy/fine-grained control
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (!origin || allowedOrigins.includes(origin)) {
-    res.header('Access-Control-Allow-Origin', origin || allowedOrigins[0]);
-    res.header('Access-Control-Allow-Credentials', 'true');
-  } else {
-    res.header('Access-Control-Allow-Origin', allowedOrigins[0]);
-  }
-  res.header('Vary', 'Origin');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.header('Access-Control-Expose-Headers', 'Content-Disposition');
-  if (req.method === 'OPTIONS') {
-    return res.status(204).end();
-  }
-  next();
-});
+    res.header('Vary', 'Origin');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    res.header('Access-Control-Expose-Headers', 'Content-Disposition');
+    if (req.method === 'OPTIONS') {
+      return res.status(204).end();
+    }
+    next();
+  });
+}
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, 'public', 'uploads');
@@ -106,11 +103,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
- app.use(cors({
-          origin: 'http://join.mslpakistan.org', // Replace with your frontend URL
-          methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-          allowedHeaders: ['Content-Type', 'Authorization']
-        }));
+// ...existing code...
 // Test endpoint
 app.get('/test', (req, res) => {
   res.json({ message: 'Server is running' });
@@ -118,7 +111,8 @@ app.get('/test', (req, res) => {
 
 // Root endpoint to prevent 404 on /
 app.get('/', (req, res) => {
-  res.send('MSL Pakistan Online Server is running.');
+  // Serve frontend index.html for root
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // Configure multer for file uploads
@@ -846,6 +840,7 @@ app.use('/fonts', (req, res, next) => {
 });
 app.use('/fonts', express.static(fontsDir));
 
+
 // Get PDF template endpoint
 app.get('/get-pdf-template', (req, res) => {
   const pdfPath = path.join(__dirname, 'storage', 'template', 'template.pdf');
@@ -858,6 +853,19 @@ app.get('/get-pdf-template', (req, res) => {
   } else {
     res.status(404).json({ error: 'PDF template not found' });
   }
+});
+
+// --- CATCH-ALL: Serve React frontend for all non-API routes (client-side routing support) ---
+// Place this after all API/static routes, before app.listen
+app.get('*', (req, res) => {
+  // If the request starts with /api or other backend routes, skip
+  const apiPrefixes = [
+    '/api', '/uploads', '/templates', '/fonts', '/storage', '/get-pdf-template', '/webhook', '/whatsapp', '/send-registration-email', '/send-approval-email', '/admin', '/get-presigned-photo-upload', '/save-template', '/load-template'
+  ];
+  if (apiPrefixes.some(prefix => req.path.startsWith(prefix))) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 try {

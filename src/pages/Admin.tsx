@@ -246,7 +246,7 @@ const Admin: React.FC = () => {
       fetchMembers();
       fetchTemplates();
       // fetch whatsapp settings from server
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const API_URL = import.meta.env.VITE_API_URL || '/';
       (async () => {
         try {
           const resp = await fetch(`${API_URL}/admin/settings`);
@@ -261,7 +261,7 @@ const Admin: React.FC = () => {
 
   const saveSettings = async () => {
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const API_URL = import.meta.env.VITE_API_URL || '/';
       const resp = await fetch(`${API_URL}/admin/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -377,7 +377,7 @@ const Admin: React.FC = () => {
       // If approved, generate card, upload and notify via WhatsApp
       if (newStatus === 'approved' && memberBefore) {
         try {
-          const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+          const API_URL = import.meta.env.VITE_API_URL || '/';
           console.log('🧾 Generating card for member (on approval)...');
           const pdfBlob = await generatePdfmeCard(memberBefore);
 
@@ -387,7 +387,7 @@ const Admin: React.FC = () => {
           form.append('membership_id', memberBefore.membership_id);
 
           console.log('🔼 Uploading card to server...');
-          const uploadResp = await fetch(`${API_URL}/upload-card`, {
+          const uploadResp = await fetch(`${API_URL}upload-card`, {
             method: 'POST',
             body: form as BodyInit,
           });
@@ -399,7 +399,7 @@ const Admin: React.FC = () => {
           // Notify member via WhatsApp with template info (server will send text + media if provided)
           const language = 'en'; // You can make this configurable
           console.log('📲 Notifying member via WhatsApp with template [approval_' + language + ']...');
-          const notifyResp = await fetch(`${API_URL}/whatsapp/notify-approval`, {
+          const notifyResp = await fetch(`${API_URL}whatsapp/notify-approval`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
@@ -493,10 +493,10 @@ const Admin: React.FC = () => {
       }
 
       // Upload PDF to backend server
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const API_URL = import.meta.env.VITE_API_URL || '/';
       const formData = new FormData();
       formData.append('template', file);
-      const response = await fetch(`${API_URL}/upload-template`, {
+      const response = await fetch(`${API_URL}upload-template`, {
         method: 'POST',
         body: formData,
       });

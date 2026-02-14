@@ -121,7 +121,7 @@ const GenerateCard: React.FC = () => {
     const language = 'en'; // You can make this configurable
     try {
       // Check server-side download allowance before sending OTP
-      const API_URL = import.meta.env.VITE_API_URL || 'https://mslpakistan.online';
+      const API_URL = import.meta.env.VITE_API_URL || '/';
       try {
         const checkResp = await fetch(`${API_URL}/whatsapp/check-download-allowed`, {
           method: 'POST',
@@ -138,7 +138,7 @@ const GenerateCard: React.FC = () => {
         console.warn('Failed to check server download limit', e);
         // allow fallback to continue OTP send
       }
-      const resp = await fetch(`${API_URL}/whatsapp/send-otp`, {
+      const resp = await fetch(`${API_URL}whatsapp/send-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: member.whatsapp_number, language })
@@ -165,8 +165,8 @@ const GenerateCard: React.FC = () => {
     if (!member) return;
     setIsVerifyingOtp(true);
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const resp = await fetch(`${API_URL}/whatsapp/verify-otp`, {
+      const API_URL = import.meta.env.VITE_API_URL || '/';
+      const resp = await fetch(`${API_URL}whatsapp/verify-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: member.whatsapp_number, code: otpCode })
@@ -206,8 +206,8 @@ const GenerateCard: React.FC = () => {
       toast.success('Membership card downloaded successfully!');
       // Record download on server for enforcement
       try {
-        const API_URL = import.meta.env.VITE_API_URL || 'https://mslpakistan.online';
-        await fetch(`${API_URL}/whatsapp/record-download`, {
+        const API_URL = import.meta.env.VITE_API_URL || '/';
+        await fetch(`${API_URL}whatsapp/record-download`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ membership_id: member.membership_id })
