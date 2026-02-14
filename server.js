@@ -1,4 +1,3 @@
-
 import dotenv from 'dotenv';
 import express from 'express';
 import multer from 'multer';
@@ -853,12 +852,14 @@ app.get('/get-pdf-template', (req, res) => {
 // --- CATCH-ALL: Serve React frontend for all non-API routes (client-side routing support) ---
 // Use app.use to avoid path-to-regexp error on some hosts
 app.use((req, res, next) => {
+  // Only treat as API/static if path is exactly or starts with prefix + '/'
   const apiPrefixes = [
-    '/api', '/uploads', '/templates', '/fonts', '/storage', '/get-pdf-template', '/webhook', '/whatsapp', '/send-registration-email', '/send-approval-email', '/admin', '/get-presigned-photo-upload', '/save-template', '/load-template'
+    '/api', '/templates', '/fonts', '/storage', '/get-pdf-template', '/webhook', '/whatsapp', '/send-registration-email', '/send-approval-email', '/get-presigned-photo-upload', '/save-template', '/load-template'
   ];
-  if (apiPrefixes.some(prefix => req.path.startsWith(prefix))) {
+  if (apiPrefixes.some(prefix => req.path === prefix || req.path.startsWith(prefix + '/'))) {
     return res.status(404).json({ error: 'Not found' });
   }
+  // Otherwise, serve the React app (for /admin and all SPA routes)
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
