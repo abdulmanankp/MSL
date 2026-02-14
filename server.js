@@ -1,3 +1,4 @@
+
 import dotenv from 'dotenv';
 import express from 'express';
 import multer from 'multer';
@@ -9,14 +10,22 @@ import TemplateManager from './server/templateManager.js';
 import { logInfo, logError, logWarn } from './server/logger.js';
 import { sendRegistrationEmail, sendApprovalEmail } from './server/emailService.js';
 
+
 // Load environment variables from .env file
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// Force CORS for all origins on /admin routes (for development and production)
+app.use('/admin', cors({
+  origin: true,
+  credentials: true
+}));
 
 
 
@@ -24,60 +33,37 @@ const PORT = process.env.PORT || 3001;
 const storageDir = path.join(__dirname, 'storage');
 const templateManager = new TemplateManager(storageDir);
 
-// Set Content Security Policy (CSP) headers
+// Set permissive Content Security Policy (CSP) headers for all environments
 app.use((req, res, next) => {
   res.setHeader(
     'Content-Security-Policy',
     [
-      "default-src 'self' blob:;",
-      "script-src 'self' blob:;",
-      "style-src 'self' 'unsafe-inline';",
-      "img-src 'self' data: blob:;",
-      "font-src 'self' data:;",
-      "connect-src 'self' https://mslpakistan.online https://ugjlaalllfthxngfzvxh.supabase.co blob:;"
+      "default-src * data: blob:;",
+      "script-src * 'unsafe-inline' 'unsafe-eval' data: blob:;",
+      "style-src * 'unsafe-inline' data:;",
+      "img-src * data: blob:;",
+      "font-src * data:;",
+      "connect-src * data: blob:;"
     ].join(' ')
   );
   next();
 });
 
 
-// CORS: Only enable in development (localhost)
-if (process.env.NODE_ENV !== 'production') {
-  const allowedOrigins = [
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'http://127.0.0.1:3000',
-    'http://127.0.0.1:3001'
-  ];
-  app.use(cors({
-    origin: function(origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
-    },
-    credentials: true
-  }));
-  // Custom CORS headers for dev
-  app.use((req, res, next) => {
-    const origin = req.headers.origin;
-    if (!origin || allowedOrigins.includes(origin)) {
-      res.header('Access-Control-Allow-Origin', origin || allowedOrigins[0]);
-      res.header('Access-Control-Allow-Credentials', 'true');
-    } else {
-      res.header('Access-Control-Allow-Origin', allowedOrigins[0]);
-    }
-    res.header('Vary', 'Origin');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-    res.header('Access-Control-Expose-Headers', 'Content-Disposition');
-    if (req.method === 'OPTIONS') {
-      return res.status(204).end();
-    }
-    next();
-  });
-}
+// Permissive CORS for all environments (for development/testing only)
+app.use(cors({ origin: true, credentials: true }));
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Vary', 'Origin');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Expose-Headers', 'Content-Disposition');
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+  next();
+});
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, 'public', 'uploads');

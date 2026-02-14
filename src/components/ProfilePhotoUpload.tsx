@@ -49,25 +49,17 @@ const ProfilePhotoUpload: React.FC<ProfilePhotoUploadProps> = ({
       const ext = file.name.split('.').pop();
       const newFile = new File([fileToUpload], `photo.${ext}`, { type: fileToUpload.type });
       const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      // Step 1: Get pre-signed S3 upload URL
-      const presignRes = await fetch(`${API_URL}/get-presigned-photo-upload`, {
+      // Upload directly to backend for local storage
+      const formData = new FormData();
+      formData.append('photo', newFile);
+      const uploadRes = await fetch(`${API_URL}/upload`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: newFile.name, contentType: newFile.type })
+        body: formData
       });
-      if (!presignRes.ok) throw new Error('Failed to get S3 upload URL');
-      const { url, key, bucket } = await presignRes.json();
-      // Step 2: Upload file directly to S3
-      const uploadRes = await fetch(url, {
-        method: 'PUT',
-        headers: { 'Content-Type': newFile.type },
-        body: newFile
-      });
-      if (!uploadRes.ok) throw new Error('Upload to S3 failed');
-      // Step 3: Use S3 public URL (force bucket name)
-      const s3Url = `https://${bucket}.s3.ap-south-1.amazonaws.com/${key}`;
-      setPhotoUrl(s3Url);
-      onPhotoUploaded(s3Url);
+      if (!uploadRes.ok) throw new Error('Upload failed');
+      const { url: uploadedUrl } = await uploadRes.json();
+      setPhotoUrl(uploadedUrl);
+      onPhotoUploaded(uploadedUrl);
       toast.success('Photo uploaded successfully');
     } catch (error) {
       console.error('Upload error:', error);
