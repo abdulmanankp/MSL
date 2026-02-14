@@ -20,10 +20,23 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Force CORS for all origins on /admin routes (for development and production)
-app.use('/admin', cors({
-  origin: true,
-  credentials: true
+// CORS: Allow only specific origins (production and local dev)
+const allowedOrigins = [
+  'https://mslpakistan.online',
+  'http://localhost:3001', // local dev frontend
+];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    // allow requests with no origin (like mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      return callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
 }));
 
 
@@ -49,20 +62,7 @@ app.use((req, res, next) => {
 });
 
 
-// Permissive CORS for all environments (for development/testing only)
-app.use(cors({ origin: true, credentials: true }));
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Vary', 'Origin');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.header('Access-Control-Expose-Headers', 'Content-Disposition');
-  if (req.method === 'OPTIONS') {
-    return res.status(204).end();
-  }
-  next();
-});
+// Remove overly permissive CORS and manual headers (handled by cors middleware above)
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, 'public', 'uploads');

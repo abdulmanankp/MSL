@@ -166,7 +166,7 @@ const GenerateCard: React.FC = () => {
     setIsVerifyingOtp(true);
     try {
       const API_URL = import.meta.env.VITE_API_URL || '/';
-      const resp = await fetch(`${API_URL}whatsapp/verify-otp`, {
+      const resp = await fetch(`${API_URL.replace(/\/$/, '')}/whatsapp/verify-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: member.whatsapp_number, code: otpCode })
