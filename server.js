@@ -18,9 +18,26 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+
+
 // Initialize Template Manager
 const storageDir = path.join(__dirname, 'storage');
 const templateManager = new TemplateManager(storageDir);
+
+// Set Content Security Policy (CSP) headers
+app.use((req, res, next) => {
+  res.setHeader(
+    'Content-Security-Policy',
+    [
+      "default-src 'self' blob:;",
+      "script-src 'self' blob:;",
+      "style-src 'self' 'unsafe-inline';",
+      "img-src 'self' data: blob:;",
+      "font-src 'self' data:;"
+    ].join(' ')
+  );
+  next();
+});
 
 // Allowed origins
 const allowedOrigins = [
@@ -30,8 +47,13 @@ const allowedOrigins = [
   'http://localhost:3001',
   'http://127.0.0.1:3000',
   'http://127.0.0.1:3001'
-];
 
+  
+];
+app.use(cors({
+  origin: "https://join.mslpakistan.org",
+  credentials: true
+}));
 // Enable CORS: allow join.mslpakistan.org for all endpoints (PDF, photo upload/fetch, API)
 app.use((req, res, next) => {
   const origin = req.headers.origin;
