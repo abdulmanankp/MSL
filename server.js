@@ -856,9 +856,8 @@ app.get('/get-pdf-template', (req, res) => {
 });
 
 // --- CATCH-ALL: Serve React frontend for all non-API routes (client-side routing support) ---
-// Place this after all API/static routes, before app.listen
-app.get('*', (req, res) => {
-  // If the request starts with /api or other backend routes, skip
+// Use app.use to avoid path-to-regexp error on some hosts
+app.use((req, res, next) => {
   const apiPrefixes = [
     '/api', '/uploads', '/templates', '/fonts', '/storage', '/get-pdf-template', '/webhook', '/whatsapp', '/send-registration-email', '/send-approval-email', '/admin', '/get-presigned-photo-upload', '/save-template', '/load-template'
   ];
