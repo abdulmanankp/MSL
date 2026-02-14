@@ -138,7 +138,7 @@ const GenerateCard: React.FC = () => {
         console.warn('Failed to check server download limit', e);
         // allow fallback to continue OTP send
       }
-      const resp = await fetch(`${API_URL}whatsapp/send-otp`, {
+      const resp = await fetch(`${API_URL.replace(/\/$/, '')}/whatsapp/send-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: member.whatsapp_number, language })

@@ -1,6 +1,13 @@
 import nodemailer from 'nodemailer';
 import { logInfo, logError } from './logger.js';
 
+// DEBUG: Log SMTP credentials presence (do not log in production!)
+if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+  console.error('[EMAIL DEBUG] Missing SMTP_USER or SMTP_PASS in environment variables!');
+} else {
+  console.log('[EMAIL DEBUG] SMTP_USER and SMTP_PASS are set.');
+}
+
 // Create transporter with Hostinger SMTP
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.hostinger.com',
