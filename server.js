@@ -118,6 +118,11 @@ app.get('/test', (req, res) => {
   res.json({ message: 'Server is running' });
 });
 
+// Root endpoint to prevent 404 on /
+app.get('/', (req, res) => {
+  res.send('MSL Pakistan Online Server is running.');
+});
+
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
