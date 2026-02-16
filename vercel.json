@@ -1,0 +1,85 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "server.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "public"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/server.js"
+    },
+    {
+      "src": "/webhook",
+      "dest": "/server.js"
+    },
+    {
+      "src": "/whatsapp/(.*)",
+      "dest": "/server.js"
+    },
+    {
+      "src": "/templates/(.*)",
+      "dest": "/server.js"
+    },
+    {
+      "src": "/fonts/(.*)",
+      "dest": "/server.js"
+    },
+    {
+      "src": "/storage/(.*)",
+      "dest": "/server.js"
+    },
+    {
+      "src": "/uploads/(.*)",
+      "dest": "/server.js"
+    },
+    {
+      "src": "/test",
+      "dest": "/server.js"
+    },
+    {
+      "src": "/health",
+      "dest": "/server.js"
+    },
+    {
+      "src": "/send-registration-email",
+      "dest": "/server.js"
+    },
+    {
+      "src": "/send-approval-email",
+      "dest": "/server.js"
+    },
+    {
+      "src": "/get-presigned-photo-upload",
+      "dest": "/server.js"
+    },
+    {
+      "src": "/save-template",
+      "dest": "/server.js"
+    },
+    {
+      "src": "/load-template",
+      "dest": "/server.js"
+    },
+    {
+      "src": "/get-pdf-template",
+      "dest": "/server.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/public/$1"
+    }
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  }
+}

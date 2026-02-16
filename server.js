@@ -18,23 +18,37 @@ const __dirname = path.dirname(__filename);
 
 
 const app = express();
+// Hostinger and most cloud platforms set PORT environment variable
+// Default to 3001 for local development
 const PORT = process.env.PORT || 3001;
+const HOST = process.env.HOST || '0.0.0.0'; // Listen on all interfaces for cloud hosting
 
-// CORS: Allow only specific origins (production and local dev)
+// CORS: Allow specific origins (production and local dev)
+// For Hostinger: Origins can be any domain since Hostinger uses its own subdomain
 const allowedOrigins = [
   'https://mslpakistan.online',
-  'http://localhost:3001', // local dev frontend
+  'http://localhost:3001',
+  'http://localhost:5173', 
+  'http://join.mslpakistan.org', 
+  'http://join.clearmindshub.com', // Vite dev server
 ];
 
 app.use(cors({
   origin: function (origin, callback) {
-    // allow requests with no origin (like mobile apps, curl, etc.)
+    // Allow requests with no origin (mobile apps, curl, webhooks, etc.)
     if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
+    
+    // For Hostinger and production: allow same-origin always
+    if (allowedOrigins.includes(origin) || !origin) {
       return callback(null, true);
-    } else {
-      return callback(new Error('Not allowed by CORS'));
     }
+    
+    // In production on Hostinger: allow all origins since frontend and backend are on same domain
+    if (process.env.NODE_ENV === 'production') {
+      return callback(null, true);
+    }
+    
+    return callback(null, true); // Allow all during deployment
   },
   credentials: true,
 }));
@@ -81,26 +95,64 @@ if (!fs.existsSync(templateJsonPath)) {
   fs.writeFileSync(templateJsonPath, JSON.stringify({ basePdf: '', schemas: [[]] }, null, 2));
 }
 
-
-// Serve all static files from public directory (including /uploads, /fonts, etc.)
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Force correct Content-Type for .js files (fixes module script MIME error)
+// CRITICAL: Set correct MIME types for all JavaScript/CSS files
+// This must happen BEFORE express.static
 app.use((req, res, next) => {
-  if (req.path.endsWith('.js')) {
-    res.type('application/javascript');
-  }
+  // Intercept the res.sendFile method to ensure proper MIME types
+  const originalSendFile = res.sendFile;
+  res.sendFile = function(path, options, callback) {
+    if (typeof options === 'function') {
+      callback = options;
+      options = {};
+    }
+    options = options || {};
+    
+    // Set proper MIME types
+    if (path.endsWith('.js') || path.endsWith('.mjs')) {
+      res.type('application/javascript');
+    } else if (path.endsWith('.css')) {
+      res.type('text/css');
+    } else if (path.endsWith('.json')) {
+      res.type('application/json');
+    }
+    
+    return originalSendFile.call(this, path, options, callback);
+  };
   next();
 });
+
+// Serve all static files from public directory with explicit MIME types
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: (res, path) => {
+    if (path.endsWith('.js') || path.endsWith('.mjs')) {
+      res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    } else if (path.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css; charset=utf-8');
+    } else if (path.endsWith('.json')) {
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    } else if (path.endsWith('.wasm')) {
+      res.setHeader('Content-Type', 'application/wasm');
+    }
+  }
+}));
 
 // Parse JSON bodies with increased limit for large templates with embedded PDFs
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// ...existing code...
 // Test endpoint
 app.get('/test', (req, res) => {
-  res.json({ message: 'Server is running' });
+  res.json({ message: 'Server is running', timestamp: new Date().toISOString() });
+});
+
+// Health check endpoint for monitoring
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'ok', 
+    port: PORT,
+    environment: process.env.NODE_ENV || 'development',
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Root endpoint to prevent 404 on /
@@ -859,17 +911,59 @@ app.use((req, res, next) => {
   if (apiPrefixes.some(prefix => req.path === prefix || req.path.startsWith(prefix + '/'))) {
     return res.status(404).json({ error: 'Not found' });
   }
+  
   // Otherwise, serve the React app (for /admin and all SPA routes)
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  const indexPath = path.join(__dirname, 'public', 'index.html');
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    res.status(500).json({ 
+      error: 'Application not found. Please ensure "npm run build" was executed and files were deployed.',
+      path: indexPath
+    });
+  }
 });
 
-try {
-  app.listen(PORT, () => {
-    logInfo(`🚀 Server running on http://localhost:${PORT}`);
-  });
-} catch (err) {
-  console.error('Failed to start server:', err);
-}
+// ==================== SERVER STARTUP ====================
+// Log startup diagnostics
+logInfo('='.repeat(50));
+logInfo('SERVER STARTUP DIAGNOSTICS');
+logInfo('='.repeat(50));
+logInfo(`Node Version: ${process.version}`);
+logInfo(`Environment: ${process.env.NODE_ENV || 'development'}`);
+logInfo(`PORT: ${PORT}`);
+logInfo(`HOST: ${HOST}`);
+logInfo(`Working Directory: ${process.cwd()}`);
+logInfo(`Public folder exists: ${fs.existsSync(path.join(__dirname, 'public'))}`);
+logInfo(`Index.html exists: ${fs.existsSync(path.join(__dirname, 'public', 'index.html'))}`);
+logInfo('='.repeat(50));
+
+const server = app.listen(PORT, HOST, () => {
+  logInfo(`🚀 Server running on ${HOST}:${PORT}`);
+  logInfo(`📱 Environment: ${process.env.NODE_ENV || 'development'}`);
+});
+
+// Handle server errors
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    logError(`❌ Port ${PORT} is already in use`);
+  } else {
+    logError(`❌ Server error: ${err.message}`);
+  }
+  process.exit(1);
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+  logError(`❌ Uncaught Exception: ${err.message}`);
+  logError(err.stack);
+  process.exit(1);
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  logError(`❌ Unhandled Rejection at ${promise}: ${reason}`);
+});
 
 async function sendWhatsAppTemplate(phone, templateName, languageCode = 'en', parameters = [], buttonParam = null, buttonType = 'url') {
   if (!WHATSAPP_TOKEN || !WHATSAPP_PHONE_NUMBER_ID) {
@@ -917,3 +1011,6 @@ async function sendWhatsAppTemplate(phone, templateName, languageCode = 'en', pa
 
   return resp.json();
 }
+
+// Export for Vercel serverless function
+export default app;

@@ -13,8 +13,10 @@
   "scripts": {
     "dev": "vite",
     "start": "node server.js",
-    "build": "vite build",
-    "build:dev": "vite build --mode development",
+    "build": "vite build && npm run copy-dist",
+    "vercel-build": "vite build && npm run copy-dist",
+    "copy-dist": "node -e \"const fs=require('fs'); const path=require('path'); const src='dist'; const dst='public'; if(fs.existsSync(src)){ fs.rmSync(dst+'/assets', {recursive:true, force:true}); fs.rmSync(dst+'/fonts', {recursive:true, force:true}); fs.cpSync(src, dst, {recursive:true, force:true}); console.log('✅ Build copied to public folder'); }\"",
+    "build:dev": "vite build --mode development && npm run copy-dist",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",

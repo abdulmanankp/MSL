@@ -1,0 +1,12 @@
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # Don't rewrite actual files or directories
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+
+  # Rewrite all non-file/non-directory requests to server.js
+  # This allows Express to handle routing
+  RewriteRule ^(.*)$ server.js [QSA,L]
+</IfModule>
