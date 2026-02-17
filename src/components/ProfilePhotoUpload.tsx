@@ -10,6 +10,18 @@ interface ProfilePhotoUploadProps {
   currentPhotoUrl?: string;
 }
 
+/**
+ * ProfilePhotoUpload Component
+ * 
+ * Handles profile photo uploads with:
+ * - Automatic compression (max 250KB)
+ * - Upload to external file server
+ * - CORS support for public image URLs
+ * - Preview and remove functionality
+ * 
+ * Uploaded photos are stored at: https://server.mslpakistan.org/storage/profile/{filename}
+ * Used in: Admin dashboard, Membership card generation
+ */
 const ProfilePhotoUpload: React.FC<ProfilePhotoUploadProps> = ({
   onPhotoUploaded,
   currentPhotoUrl,
@@ -24,14 +36,15 @@ const ProfilePhotoUpload: React.FC<ProfilePhotoUploadProps> = ({
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
-      toast.error('Please select an image file');
+      toast.error('Please select an image file (JPEG, PNG, WebP, or HEIC)');
       return;
     }
 
     setIsUploading(true);
     try {
       let fileToUpload = file;
-      // Only compress if file is larger than 250KB
+      
+      // Compress if file is larger than 250KB
       if (file.size > 250 * 1024) {
         const options = {
           maxSizeMB: 0.25,
@@ -39,31 +52,49 @@ const ProfilePhotoUpload: React.FC<ProfilePhotoUploadProps> = ({
           useWebWorker: true,
         };
         fileToUpload = await imageCompression(file, options);
+        
+        // Verify compression was successful
         if (fileToUpload.size > 250 * 1024) {
-          toast.error('Image must be less than 250KB after compression');
+          toast.error('Image must be less than 250KB after compression. Try a lower resolution.');
           setIsUploading(false);
           return;
         }
       }
-      // Always preserve the original extension
-      const ext = file.name.split('.').pop();
+      
+      // Preserve original file extension
+      const ext = file.name.split('.').pop() || 'jpg';
       const newFile = new File([fileToUpload], `photo.${ext}`, { type: fileToUpload.type });
+      
+      // Upload to server (/upload endpoint uses external file server)
       const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      // Upload directly to backend for local storage
       const formData = new FormData();
       formData.append('photo', newFile);
+      
       const uploadRes = await fetch(`${API_URL}/upload`, {
         method: 'POST',
-        body: formData
+        body: formData,
+        // CORS headers will be handled by server
       });
-      if (!uploadRes.ok) throw new Error('Upload failed');
+      
+      if (!uploadRes.ok) {
+        const errorData = await uploadRes.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Upload failed');
+      }
+      
       const { url: uploadedUrl } = await uploadRes.json();
+      
+      // Validate server response URL format
+      if (!uploadedUrl || typeof uploadedUrl !== 'string') {
+        throw new Error('Invalid response from server');
+      }
+      
       setPhotoUrl(uploadedUrl);
       onPhotoUploaded(uploadedUrl);
-      toast.success('Photo uploaded successfully');
+      toast.success('Photo uploaded successfully ✨');
     } catch (error) {
       console.error('Upload error:', error);
-      toast.error('Failed to upload photo. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Failed to upload photo: ${errorMessage}`);
     } finally {
       setIsUploading(false);
     }
@@ -75,6 +106,7 @@ const ProfilePhotoUpload: React.FC<ProfilePhotoUploadProps> = ({
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+    toast.info('Photo removed');
   };
 
   return (
@@ -82,7 +114,13 @@ const ProfilePhotoUpload: React.FC<ProfilePhotoUploadProps> = ({
       <div className="relative">
         <Avatar className="h-24 w-24 border-2 border-border">
           {photoUrl ? (
-            <AvatarImage src={photoUrl} alt="Profile photo" className="object-cover" />
+            <AvatarImage 
+              src={photoUrl} 
+              alt="Profile photo" 
+              className="object-cover"
+              // CORS-friendly: server.mslpakistan.org allows cross-origin
+              crossOrigin="anonymous"
+            />
           ) : (
             <AvatarFallback className="bg-muted">
               <Camera className="h-8 w-8 text-muted-foreground" />
@@ -94,6 +132,8 @@ const ProfilePhotoUpload: React.FC<ProfilePhotoUploadProps> = ({
             type="button"
             onClick={handleRemovePhoto}
             className="absolute -top-1 -right-1 h-6 w-6 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center hover:bg-destructive/90 transition-colors"
+            title="Remove photo"
+            aria-label="Remove photo"
           >
             <X className="h-3 w-3" />
           </button>
@@ -107,6 +147,7 @@ const ProfilePhotoUpload: React.FC<ProfilePhotoUploadProps> = ({
         onChange={handleFileSelect}
         className="hidden"
         id="profile-photo-input"
+        aria-label="Select profile photo"
       />
       
       <Button
@@ -128,6 +169,7 @@ const ProfilePhotoUpload: React.FC<ProfilePhotoUploadProps> = ({
           </>
         )}
       </Button>
+      
       <Button
         type="button"
         variant="secondary"
@@ -137,8 +179,14 @@ const ProfilePhotoUpload: React.FC<ProfilePhotoUploadProps> = ({
       >
         Compress Image Online
       </Button>
-      <p className="text-xs text-muted-foreground text-center">
-        Upload a passport-size photo (max 250KB, will be compressed automatically)
+      
+      <p className="text-xs text-muted-foreground text-center max-w-xs">
+        Upload a passport-size photo (max 250KB, auto-compressed). Stored on our secure file server.
+        {photoUrl && (
+          <span className="block mt-1 text-green-600">
+            ✓ Photo stored at: server.mslpakistan.org
+          </span>
+        )}
       </p>
     </div>
   );

@@ -8,10 +8,48 @@ import { fileURLToPath } from 'url';
 import TemplateManager from './server/templateManager.js';
 import { logInfo, logError, logWarn } from './server/logger.js';
 import { sendRegistrationEmail, sendApprovalEmail } from './server/emailService.js';
+import { compressImage } from './server/imageCompression.js';
+import { createClient } from '@supabase/supabase-js';
+import axios from "axios";
 
+
+
+const url = `https://join.mslpakistan.org`;
+const interval = 600000;
+
+function reloadWebsite() {
+  axios
+    .get(url)
+    .then((response) => {
+      console.log("website reloded");
+    })
+    .catch((error) => {
+      console.error(`Error : ${error.message}`);
+    });
+}
+
+setInterval(reloadWebsite, interval);
 
 // Load environment variables from .env file
 dotenv.config();
+
+// Initialize Supabase client for storage
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+// External file server configuration (PHP microservice)
+const FILE_SERVER_URL = process.env.FILE_SERVER_URL || '';
+const FILE_SERVER_API_TOKEN = process.env.FILE_SERVER_API_TOKEN || '';
+
+let supabase = null;
+if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+  supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { persistSession: false }
+  });
+  logInfo('Supabase client initialized for profile photo storage');
+} else {
+  logWarn('Supabase credentials not found. Profile photos will be stored locally.');
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -161,22 +199,16 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  }
-});
+// Configure multer for file uploads (profile photos)
+// Use memory storage to upload directly to external file server
+const storage = multer.memoryStorage();
 
 const upload = multer({
   storage: storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  limits: { fileSize: 250 * 1024 }, // 250KB limit
   fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/jpg'];
+    if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
       cb(new Error('Only image files are allowed!'), false);
@@ -764,15 +796,53 @@ const pdfUpload = multer({
   }
 });
 
-// Upload endpoint
-app.post('/upload', upload.single('photo'), (req, res) => {
+// Upload endpoint - Profile photos to external PHP file server
+app.post('/upload', upload.single('photo'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
-  // Return the URL to access the file
-  const baseUrl = process.env.API_URL || `http://localhost:${PORT}`;
-  const fileUrl = `${baseUrl}/uploads/${req.file.filename}`;
-  res.json({ url: fileUrl });
+
+  try {
+    if (!FILE_SERVER_URL || !FILE_SERVER_API_TOKEN) {
+      logError('❌ File server is not configured. Cannot upload profile photo.');
+      return res.status(500).json({ error: 'File server not configured' });
+    }
+
+    // Generate filename with timestamp
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    const base = path.basename(req.file.originalname, ext);
+    const filename = `${base}-${Date.now()}${ext}`;
+
+    const uploadUrl = `${FILE_SERVER_URL.replace(/\/$/, '')}/upload`;
+    const formData = new FormData();
+    formData.append('photo', new Blob([req.file.buffer], { type: req.file.mimetype }), filename);
+
+    const response = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${FILE_SERVER_API_TOKEN}`
+      },
+      body: formData
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      logError(`❌ File server upload failed: ${response.status} ${errorBody}`);
+      return res.status(502).json({ error: 'Failed to upload file to file server' });
+    }
+
+    const payload = await response.json();
+    if (!payload || !payload.url) {
+      logError('❌ File server response missing url');
+      return res.status(502).json({ error: 'Invalid response from file server' });
+    }
+
+    logInfo(`✅ Profile photo uploaded successfully: ${filename}`);
+    res.json({ url: payload.url });
+  } catch (error) {
+    logError(`❌ Upload endpoint error:`, error.message);
+    res.status(500).json({ error: 'Upload failed', details: error.message });
+  }
 });
 
 // PDF template upload endpoint
@@ -936,6 +1006,10 @@ logInfo(`HOST: ${HOST}`);
 logInfo(`Working Directory: ${process.cwd()}`);
 logInfo(`Public folder exists: ${fs.existsSync(path.join(__dirname, 'public'))}`);
 logInfo(`Index.html exists: ${fs.existsSync(path.join(__dirname, 'public', 'index.html'))}`);
+logInfo('='.repeat(50));
+logInfo('📦 FILE SERVER CONFIGURATION');
+logInfo(`  URL: ${FILE_SERVER_URL ? '✅ SET' : '❌ MISSING'}`);
+logInfo(`  API Token: ${FILE_SERVER_API_TOKEN ? '✅ SET' : '❌ MISSING'}`);
 logInfo('='.repeat(50));
 
 const server = app.listen(PORT, HOST, () => {

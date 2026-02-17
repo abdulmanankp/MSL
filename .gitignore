@@ -14,6 +14,7 @@ node_modules
 dist
 dist-ssr
 *.local
+file-server/
 
 # Ignore environment files
 .env
