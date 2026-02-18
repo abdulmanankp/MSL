@@ -10,6 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { User } from '@supabase/supabase-js';
 import { uiFontOptions, DEFAULT_FONT_NAME } from '@/lib/fontConfig';
+import { createMinimalPDFBase64, isValidBasePdf, loadDefaultTemplatePdf } from '@/lib/minimalPdf';
 
 interface FieldConfig {
   key: string;
@@ -37,8 +38,9 @@ const AVAILABLE_FIELDS: FieldConfig[] = [
   { key: 'qr_code', label: 'QR Code', type: 'image', shape: 'rectangle', width: 40, height: 40 },
 ];
 
+// Note: defaultTemplate will be initialized with the actual PDF from server
 const defaultTemplate: Template = {
-  basePdf: '',
+  basePdf: createMinimalPDFBase64(), // Fallback, will be replaced with actual PDF
   schemas: [[]],
 };
 
@@ -91,30 +93,94 @@ const TemplateDesigner: React.FC = () => {
   useEffect(() => {
     const loadTemplate = async () => {
       try {
+        // First, load the default template PDF from server (the actual design)
+        const defaultPdfBase64 = await loadDefaultTemplatePdf(API_URL);
+
+        // Then, load the saved template configuration
         const url = API_URL.endsWith('/')
           ? `${API_URL}load-template`
           : `${API_URL}/load-template`;
 
         const response = await fetch(url, { mode: 'cors' });
-        if (!response.ok) throw new Error(`Status ${response.status}`);
+        let loadedTemplate: Partial<Template> = {
+          basePdf: defaultPdfBase64,
+          schemas: [[]]
+        };
 
-        const loadedTemplate = await response.json();
-
-        if (
-          loadedTemplate.basePdf &&
-          typeof loadedTemplate.basePdf === 'string' &&
-          loadedTemplate.basePdf.includes('http')
-        ) {
-          const pdfResponse = await fetch(loadedTemplate.basePdf);
-          const pdfBuffer = await pdfResponse.arrayBuffer();
-          loadedTemplate.basePdf = new Uint8Array(pdfBuffer);
+        if (response.ok) {
+          try {
+            loadedTemplate = await response.json();
+          } catch (e) {
+            console.warn('Could not parse template JSON, using default');
+          }
         }
 
-        setTemplate(loadedTemplate);
-        stableTemplateRef.current = loadedTemplate;
+        // Handle different basePdf formats
+        if (loadedTemplate.basePdf) {
+          if (typeof loadedTemplate.basePdf === 'string') {
+            if (loadedTemplate.basePdf.startsWith('http')) {
+              // Handle URL-based PDF
+              const pdfResponse = await fetch(loadedTemplate.basePdf);
+              const pdfBuffer = await pdfResponse.arrayBuffer();
+              loadedTemplate.basePdf = new Uint8Array(pdfBuffer);
+            } else if (loadedTemplate.basePdf.length > 0 && !loadedTemplate.basePdf.startsWith('data:')) {
+              // Handle base64-encoded PDF - convert to Uint8Array for runtime use
+              try {
+                const binaryString = atob(loadedTemplate.basePdf);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                  bytes[i] = binaryString.charCodeAt(i);
+                }
+                loadedTemplate.basePdf = bytes;
+              } catch (e) {
+                // If base64 decoding fails, use server PDF
+                console.warn('Failed to decode base64 PDF, using server PDF', e);
+                const binaryString = atob(defaultPdfBase64);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                  bytes[i] = binaryString.charCodeAt(i);
+                }
+                loadedTemplate.basePdf = bytes;
+              }
+            }
+          }
+        }
+
+        // Ensure basePdf is valid
+        const basePdf = loadedTemplate.basePdf;
+        if (basePdf && typeof basePdf !== 'string' && !(basePdf instanceof Uint8Array)) {
+          // Convert ArrayBuffer to Uint8Array if needed
+          if (basePdf instanceof ArrayBuffer) {
+            loadedTemplate.basePdf = new Uint8Array(basePdf);
+          }
+        }
+
+        if (!isValidBasePdf(loadedTemplate.basePdf as string | Uint8Array | undefined)) {
+          const binaryString = atob(defaultPdfBase64);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          loadedTemplate.basePdf = bytes;
+        }
+
+        // Ensure schemas is present and is a valid array
+        if (!loadedTemplate.schemas || !Array.isArray(loadedTemplate.schemas)) {
+          loadedTemplate.schemas = [[]];
+        }
+
+        setTemplate(loadedTemplate as Template);
+        stableTemplateRef.current = loadedTemplate as Template;
       } catch (error) {
         console.error(error);
         toast.error('Failed to load template');
+        // Fallback to minimal PDF
+        const fallbackTemplate: Template = {
+          basePdf: createMinimalPDFBase64(),
+          schemas: [[]]
+        };
+        setTemplate(fallbackTemplate);
+        stableTemplateRef.current = fallbackTemplate;
       } finally {
         setIsLoading(false);
       }
@@ -133,6 +199,13 @@ const TemplateDesigner: React.FC = () => {
         try {
           setIsSaving(true);
 
+          // Convert Uint8Array basePdf to base64 string for JSON serialization
+          const templateForSave = { ...templateToSave };
+          if (templateForSave.basePdf instanceof Uint8Array) {
+            const binaryString = String.fromCharCode(...templateForSave.basePdf);
+            templateForSave.basePdf = btoa(binaryString);
+          }
+
           const url = API_URL.endsWith('/')
             ? `${API_URL}save-template`
             : `${API_URL}/save-template`;
@@ -141,7 +214,7 @@ const TemplateDesigner: React.FC = () => {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             mode: 'cors',
-            body: JSON.stringify({ template: templateToSave }),
+            body: JSON.stringify({ template: templateForSave }),
           });
         } catch (err) {
           console.error('Save error:', err);

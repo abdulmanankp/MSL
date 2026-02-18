@@ -1,7 +1,17 @@
 import { createClient } from '@supabase/supabase-js';
 import { PDFDocument, rgb } from 'pdf-lib';
 
-const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_KEY) {
+  console.error('Supabase environment variables are not properly set. URL:', !!SUPABASE_URL, 'Key:', !!SUPABASE_KEY);
+}
+
+const supabase = createClient(
+  SUPABASE_URL || 'https://placeholder.supabase.co',
+  SUPABASE_KEY || 'placeholder-key'
+);
 
 export async function generateAndUploadCard(userId: string, formData: any, templateFile: string, fieldMapping: any) {
   // 1. Download Template from Supabase Storage

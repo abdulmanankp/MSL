@@ -127,10 +127,27 @@ const templateDir = path.join(__dirname, 'storage', 'template');
 if (!fs.existsSync(templateDir)) {
   fs.mkdirSync(templateDir, { recursive: true });
 }
-// Ensure template.json exists
+
+// Load the actual template PDF file and convert to base64 for default template
+const getDefaultTemplatePdf = () => {
+  const actualPdfPath = path.join(templateDir, 'template.pdf');
+  if (fs.existsSync(actualPdfPath)) {
+    try {
+      const pdfBuffer = fs.readFileSync(actualPdfPath);
+      return pdfBuffer.toString('base64');
+    } catch (err) {
+      console.error('Error reading template.pdf:', err);
+    }
+  }
+  // Fallback to minimal PDF if actual file not found
+  return 'JVBERi0xLjQKMSAwIG9iagogPDwgL1R5cGUgL0NhdGFsb2cgL1BhZ2VzIDIgMCBSID4+CmVuZG9iCjIgMCBvYmoKIDw8IC9UeXBlIC9QYWdlcyAvS2lkcyBbMyAwIFJdIC9Db3VudCAxID4+CmVuZG9iCjMgMCBvYmoKIDw8IC9UeXBlIC9QYWdlIC9QYXJlbnQgMiAwIFIgL1Jlc291cmNlcyA8PCA+PiAvTWVkaWFCb3ggWzAgMCA2MTIgNzkyXSA+PgplbmRvYgp4cmVmCjAgNAowMDAwMDAwMDAwIDY1NTM1IGYKMDAwMDAwMDAwOSAwMDAwMCBuCjAwMDAwMDA1OCAwMDAwMCBuCjAwMDAwMDExNSAwMDAwMCBuCnRyYWlsZXIKPDwgL1NpemUgNCAvUm9vdCAxIDAgUiA+PgpzdGFydHhyZWYKMjI5CiUlRU9G';
+};
+
+// Ensure template.json exists with the actual PDF
 const templateJsonPath = path.join(templateDir, 'template.json');
 if (!fs.existsSync(templateJsonPath)) {
-  fs.writeFileSync(templateJsonPath, JSON.stringify({ basePdf: '', schemas: [[]] }, null, 2));
+  const defaultPdf = getDefaultTemplatePdf();
+  fs.writeFileSync(templateJsonPath, JSON.stringify({ basePdf: defaultPdf, schemas: [[]] }, null, 2));
 }
 
 // CRITICAL: Set correct MIME types for all JavaScript/CSS files

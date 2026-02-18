@@ -12,6 +12,7 @@ import { image, text } from '@pdfme/schemas';
 import type { Template } from '@pdfme/common';
 import { fontConfig, uiFontOptions } from '@/lib/fontConfig';
 import { circularImagePlugin } from '@/lib/circularImagePlugin';
+import { isValidBasePdf, createMinimalPDFBase64 } from '@/lib/minimalPdf';
 
 // Custom text plugin with Montserrat support and bold control
 const customText = {
@@ -101,11 +102,34 @@ const PdfmeDesignerWrapper: React.FC<PdfmeDesignerWrapperProps> = ({
     
     // Only initialize if the ref is attached and designer doesn't exist
     if (containerRef.current && !currentDesignerRef.current) {
+      // Ensure basePdf is valid and convert base64 to Uint8Array if needed
+      const validTemplate = { ...template };
+      
+      if (typeof validTemplate.basePdf === 'string' && validTemplate.basePdf.length > 0) {
+        // Convert base64 string to Uint8Array for the Designer
+        try {
+          // Check if it looks like base64 (only alphanumeric, +, /, and = for padding)
+          if (/^[A-Za-z0-9+/=]+$/.test(validTemplate.basePdf)) {
+            const binaryString = atob(validTemplate.basePdf);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+            validTemplate.basePdf = bytes;
+          }
+        } catch (e) {
+          console.warn('Failed to decode basePdf as base64', e);
+          validTemplate.basePdf = createMinimalPDFBase64();
+        }
+      } else if (!validTemplate.basePdf) {
+        validTemplate.basePdf = createMinimalPDFBase64();
+      }
+      
       designerContainer = containerRef.current; // Capture the current value
       
       currentDesignerRef.current = new Designer({
         domContainer: designerContainer,
-        template,
+        template: validTemplate,
         options: {
           ...options,
           font: fontConfig,

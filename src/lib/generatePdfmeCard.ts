@@ -124,7 +124,7 @@ export async function generatePdfmeCard(member: Database['public']['Tables']['me
   }
   
   // Ensure template.basePdf is raw PDF data (Uint8Array) before generation.
-  // Acceptable stored forms: Uint8Array, data URL (data:application/pdf;base64,...), or HTTP URL.
+  // Acceptable stored forms: Uint8Array, base64 string, data URL (data:application/pdf;base64,...), or HTTP URL.
   const ensureBasePdfIsBytes = async () => {
     if (!template.basePdf) {
       throw new Error('No PDF template found. Please upload and save a PDF template first.');
@@ -135,8 +135,9 @@ export async function generatePdfmeCard(member: Database['public']['Tables']['me
       return;
     }
 
-    // Data URL
+    // String formats
     if (typeof template.basePdf === 'string') {
+      // Data URL (data:application/pdf;base64,...)
       if (template.basePdf.startsWith('data:')) {
         try {
           const resp = await fetch(template.basePdf as string);
@@ -164,31 +165,37 @@ export async function generatePdfmeCard(member: Database['public']['Tables']['me
         }
       }
 
-      // Try local server path (e.g., "/templates/template.pdf")
+      // Local server path (e.g., "/templates/template.pdf")
       if (template.basePdf.startsWith('/')) {
         try {
-    // Ensure template.basePdf is raw PDF data (Uint8Array) before generation.
-    // Only allow Uint8Array or fetch from local /get-pdf-template endpoint.
-    const ensureBasePdfIsBytes = async () => {
-      if (!template.basePdf) {
-        // Try to fetch from local endpoint
-        const resp = await fetch('http://localhost:3001/get-pdf-template', { mode: 'cors' });
-        if (!resp.ok) throw new Error('No PDF template found. Please upload and save a PDF template first.');
-        const buf = await resp.arrayBuffer();
-        template.basePdf = new Uint8Array(buf);
-        return;
-      }
-      if (template.basePdf instanceof Uint8Array) {
-        return;
-      }
-      throw new Error('Unsupported basePdf format. Only local PDF is allowed.');
-    };
+          const pdfResp = await fetch(template.basePdf as string, { mode: 'cors' });
+          if (!pdfResp.ok) throw new Error(`Failed to fetch PDF from local path: ${pdfResp.status}`);
           const buf = await pdfResp.arrayBuffer();
           template.basePdf = new Uint8Array(buf);
           return;
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);
           throw new Error(`Failed to fetch basePdf from local path: ${msg}`);
+        }
+      }
+
+      // Plain base64 string (no data URL prefix)
+      // Try to decode as base64 - if it looks like a base64 string, decode it
+      if (typeof template.basePdf === 'string' && template.basePdf.length > 0) {
+        try {
+          // Check if it looks like base64 (only alphanumeric, +, /, and = for padding)
+          if (/^[A-Za-z0-9+/=]+$/.test(template.basePdf)) {
+            const binaryString = atob(template.basePdf);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+            template.basePdf = bytes;
+            return;
+          }
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          throw new Error(`Failed to decode basePdf as base64: ${msg}`);
         }
       }
     }
@@ -214,7 +221,7 @@ export async function generatePdfmeCard(member: Database['public']['Tables']['me
     }
 
     // Unknown type
-    throw new Error(`Unknown basePdf format: ${typeof template.basePdf}. Expected Uint8Array, data URL, HTTP URL, local path, or serialized byte-object.`);
+    throw new Error(`Unknown basePdf format: ${typeof template.basePdf}. Expected Uint8Array, base64 string, data URL, HTTP URL, local path, or serialized byte-object.`);
   };
 
   await ensureBasePdfIsBytes();
