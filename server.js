@@ -488,8 +488,13 @@ app.post('/whatsapp/notify-approval', express.json(), async (req, res) => {
       return res.status(200).json({ success: false, reason: 'whatsapp_disabled' });
     }
     const templateId = 'approved';
-    const langCode = 'en'; // Use correct language code for approved template
-    const params = [first_name || '', membership_id || ''];
+    const langCode = 'en_US'; // Use correct language code for approved template
+    // WhatsApp template expects named params: first_name, membership_id
+    const params = [
+      first_name || '',
+      membership_id || ''
+    ];
+    logInfo(`Sending WhatsApp approval: phone=${phone}, template=${templateId}, lang=${langCode}, params=${JSON.stringify(params)}`);
     const textResult = await sendWhatsAppTemplate(phone, templateId, langCode, params);
     let emailResult = { success: false };
     if (email && first_name) {
@@ -539,10 +544,11 @@ app.post('/admin/settings', express.json(), (req, res) => {
       downloads_per_week: typeof downloads_per_week === 'number' ? downloads_per_week : parseInt(downloads_per_week, 10) || 1,
       registration_enabled: typeof registration_enabled === 'boolean' ? registration_enabled : true
     };
+    logInfo('Admin settings update', settings);
     fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
     res.json({ success: true, settings });
   } catch (err) {
-    console.error('save settings error', err);
+    logError('save settings error', err);
     res.status(500).json({ error: 'Failed to save settings' });
   }
 });
@@ -697,11 +703,12 @@ app.post('/whatsapp/templates/reset/defaults', (req, res) => {
 app.post('/whatsapp/send-registration', express.json(), async (req, res) => {
   const { phone, first_name, membership_id, language = 'en_US' } = req.body || {};
   if (!phone) return res.status(400).json({ error: 'phone is required' });
-  const templateId = 'memeber_register'; // Use exact BM template name
+  const templateId = 'member_register'; // Use exact BM template name (fixed typo)
   logInfo(`📝 Registration: Sending template [${templateId}] to ${phone}`);
   try {
     const tm = templateManager.getTemplateById(templateId) || {};
     const langCode = tm.language || language || 'en_US';
+    // WhatsApp template expects named params: first_name, membership_id
     const params = [first_name || '', membership_id || ''];
     const urlButton = 'https://www.facebook.com/mslpakistan';
     const result = await sendWhatsAppTemplate(phone, templateId, langCode, params, urlButton);

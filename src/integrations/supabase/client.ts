@@ -3,27 +3,55 @@ import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const SUPABASE_PUBLISHABLE_KEY =
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+  import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-// Validate environment variables
-if (!SUPABASE_URL) {
-  console.error('VITE_SUPABASE_URL environment variable is not set');
-}
-if (!SUPABASE_PUBLISHABLE_KEY) {
-  console.error('VITE_SUPABASE_PUBLISHABLE_KEY environment variable is not set');
-}
+// Create a dummy client if URLs are not available - will be replaced at runtime
+let supabaseClient: any = null;
 
-// Import the supabase client like this:
-// import { supabase } from "@/integrations/supabase/client";
-
-export const supabase = createClient<Database>(
-  SUPABASE_URL || 'https://placeholder.supabase.co',
-  SUPABASE_PUBLISHABLE_KEY || 'placeholder-key',
-  {
-    auth: {
-      storage: localStorage,
-      persistSession: true,
-      autoRefreshToken: true,
+const createSupabaseClient = () => {
+  // Only create if we have valid URLs
+  if (SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY) {
+    try {
+      return createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+        auth: {
+          storage: localStorage,
+          persistSession: true,
+          autoRefreshToken: true,
+        }
+      });
+    } catch (error) {
+      console.error('Failed to create Supabase client:', error);
+      return null;
     }
   }
-);
+  return null;
+};
+
+// Initialize on first access
+supabaseClient = createSupabaseClient();
+
+// If client creation failed, log a warning but don't crash
+if (!supabaseClient) {
+  console.warn(
+    'Supabase client not initialized. ' +
+    'VITE_SUPABASE_URL: ' + (SUPABASE_URL || 'NOT SET') + ', ' +
+    'VITE_SUPABASE_PUBLISHABLE_KEY: ' + (SUPABASE_PUBLISHABLE_KEY ? 'SET' : 'NOT SET')
+  );
+}
+
+// Export the client (or a proxy that shows the error)
+export const supabase = supabaseClient || {
+  auth: {
+    getSession: async () => ({ data: { session: null } }),
+    signOut: async () => ({}),
+    onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } })
+  },
+  storage: {
+    from: () => ({
+      upload: async () => ({ error: new Error('Supabase not initialized') }),
+      download: async () => ({ error: new Error('Supabase not initialized') })
+    })
+  }
+} as any;

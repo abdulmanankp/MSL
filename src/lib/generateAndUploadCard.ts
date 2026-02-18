@@ -4,14 +4,20 @@ import { PDFDocument, rgb } from 'pdf-lib';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.error('Supabase environment variables are not properly set. URL:', !!SUPABASE_URL, 'Key:', !!SUPABASE_KEY);
+// Create supabase client only if we have valid credentials
+let supabase: any = null;
+
+if (SUPABASE_URL && SUPABASE_KEY && SUPABASE_URL.startsWith('http')) {
+  try {
+    supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+  } catch (err) {
+    console.error('Failed to initialize Supabase in generateAndUploadCard:', err);
+  }
 }
 
-const supabase = createClient(
-  SUPABASE_URL || 'https://placeholder.supabase.co',
-  SUPABASE_KEY || 'placeholder-key'
-);
+if (!supabase) {
+  console.warn('Supabase not available in generateAndUploadCard. URL:', !!SUPABASE_URL, 'Key:', !!SUPABASE_KEY);
+}
 
 export async function generateAndUploadCard(userId: string, formData: any, templateFile: string, fieldMapping: any) {
   // 1. Download Template from Supabase Storage
