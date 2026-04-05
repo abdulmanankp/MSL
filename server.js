@@ -399,15 +399,15 @@ app.post('/webhook', express.json(), (req, res) => {
     ) {
       // Handle message status updates (delivered, read, failed, etc.)
       const messageStatus = body.entry[0].changes[0].value.statuses[0];
-      console.log(`📊 Message status update: ${messageStatus.id} - ${messageStatus.status}`);
+      logInfo(`📊 Message status update: ${messageStatus.id} - ${messageStatus.status}`, messageStatus);
       
       // Log status for delivery/read receipts
       if (messageStatus.status === 'delivered') {
-        console.log(`✅ Message delivered: ${messageStatus.id}`);
+        logInfo(`✅ Message delivered: ${messageStatus.id}`, messageStatus);
       } else if (messageStatus.status === 'read') {
-        console.log(`👁️  Message read: ${messageStatus.id}`);
+        logInfo(`👁️  Message read: ${messageStatus.id}`, messageStatus);
       } else if (messageStatus.status === 'failed') {
-        console.log(`❌ Message failed: ${messageStatus.id}`);
+        logError(`❌ Message failed: ${messageStatus.id}`, messageStatus);
       }
     }
 
@@ -440,24 +440,50 @@ app.post('/whatsapp/send-otp', express.json(), async (req, res) => {
   otpStore.set(phone, { code, expires });
   const templateId = 'otp_verification';
   const langCode = 'en_US';
-  // Use all 4 required params for the template
-  // Ensure all parameters fit template length limits (usually 15 chars)
-  const params = [
-    code, // OTP code
-    'MSL Card', // Card label (shortened)
-    '5 min', // Expiry time
-    '03176227245' // Support/contact number
-  ];
+  const baseParams = [code, 'MSL Card', '5 min', '03176227245'];
   // For a button of type 'copy_code', pass the OTP code as the button parameter
   const buttonParam = code;
+  const otpText = `MSL Pakistan Verification For Membership Card Download.\n\nYour OTP Code is: ${code}\nThis code is valid for 5 minutes.\n\nIf you did not request this, please text us on 03298876069 immediately.\n\nDeveloped by Abdul Manan`;
   try {
-    const result = await sendWhatsAppTemplate(phone, templateId, langCode, params, buttonParam, 'copy_code');
+    // Template-first is required for business-initiated WhatsApp delivery.
+    let params = [...baseParams];
+    let result = await sendWhatsAppTemplate(phone, templateId, langCode, params, buttonParam, 'copy_code');
+    let usedFallbackText = false;
+    let usedTemplateFallback = false;
+
+    const details = result?.error?.error_data?.details || '';
+    const mismatch = details.match(/expected number of params \((\d+)\)/i);
+    if (result?.error?.code === 132000 && mismatch) {
+      const expectedParams = Number(mismatch[1]);
+      if (Number.isFinite(expectedParams) && expectedParams >= 0) {
+        const adjusted = baseParams.slice(0, expectedParams);
+        while (adjusted.length < expectedParams) adjusted.push('');
+        params = adjusted;
+        logWarn(`OTP params mismatch; retrying with ${expectedParams} params`, { expectedParams, params });
+        result = await sendWhatsAppTemplate(phone, templateId, langCode, params, buttonParam, 'copy_code');
+      }
+    }
+
+    const buttonDetails = result?.error?.error_data?.details || '';
+    const buttonErrorCodes = new Set([100, 131008]);
+    if (result?.error && buttonErrorCodes.has(result.error.code) && /button|buttons/i.test(buttonDetails)) {
+      logWarn(`OTP button config failed; retrying without button`, result);
+      result = await sendWhatsAppTemplate(phone, templateId, langCode, params, null, 'url');
+    }
+
+    if (result && result.error) {
+      logWarn(`OTP template failed for ${phone}, sending text fallback`, result);
+      result = await sendWhatsAppText(phone, otpText);
+      usedFallbackText = true;
+      usedTemplateFallback = true;
+    }
     if (result && result.error) {
       logError(`❌ OTP send failed [${templateId}]:`, result);
+      return res.status(500).json({ error: 'Failed to send OTP', template: templateId, result, usedFallbackText, usedTemplateFallback });
     } else {
       logInfo(`✅ OTP sent [${templateId}] to ${phone}:`, result);
     }
-    res.json({ success: true, template: templateId, result });
+    res.json({ success: true, template: templateId, result, usedFallbackText, usedTemplateFallback });
   } catch (err) {
     logError(`❌ OTP send exception [${templateId}]:`, err);
     res.status(500).json({ error: 'Failed to send OTP', template: templateId });
@@ -483,20 +509,8 @@ app.post('/whatsapp/verify-otp', express.json(), (req, res) => {
 app.post('/whatsapp/notify-approval', express.json(), async (req, res) => {
   const { phone, membership_id, language = 'en_US', email, first_name } = req.body || {};
   if (!phone) return res.status(400).json({ error: 'phone is required' });
+  const fallbackApprovalText = `Your membership for MSL is successfully approved. Now you can download your card.`;
   try {
-    const settingsPath = path.join(__dirname, 'storage', 'whatsapp_settings.json');
-    let settings = { whatsapp_enabled: true, downloads_per_week: 2};
-    try {
-      if (fs.existsSync(settingsPath)) {
-        settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-      }
-    } catch (e) {
-      logWarn('Failed to read whatsapp settings, using defaults', e);
-    }
-    if (!settings.whatsapp_enabled) {
-      logInfo(`⏭️  Approval: WhatsApp disabled for ${phone}`);
-      return res.status(200).json({ success: false, reason: 'whatsapp_disabled' });
-    }
     const templateId = 'approved';
     const langCode = 'en_US'; // Use correct language code for approved template
     // WhatsApp template expects named params: first_name, membership_id
@@ -505,12 +519,18 @@ app.post('/whatsapp/notify-approval', express.json(), async (req, res) => {
       membership_id || ''
     ];
     logInfo(`Sending WhatsApp approval: phone=${phone}, template=${templateId}, lang=${langCode}, params=${JSON.stringify(params)}`);
-    const textResult = await sendWhatsAppTemplate(phone, templateId, langCode, params);
+    let textResult = await sendWhatsAppTemplate(phone, templateId, langCode, params);
+    let usedFallbackText = false;
+    if (textResult && textResult.error) {
+      logWarn(`Approved template failed for ${phone}, sending fallback text`, textResult);
+      textResult = await sendWhatsAppText(phone, fallbackApprovalText);
+      usedFallbackText = true;
+    }
     let emailResult = { success: false };
     if (email && first_name) {
       emailResult = await sendApprovalEmail(email, first_name, membership_id);
     }
-    res.json({ success: true, template: templateId, textResult, emailResult });
+    res.json({ success: true, template: templateId, textResult, usedFallbackText, emailResult });
   } catch (err) {
     logError(`❌ Approval send failed`, err);
     res.status(500).json({ error: 'Failed to notify approval' });

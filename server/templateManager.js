@@ -27,7 +27,14 @@ const DEFAULT_TEMPLATES = {
     type: 'otp',
     description: 'Automatic template for card download verification',
     content: {
-      text: `OTP Code: {{otp_code}}. This is your OTP for Membership Card. The OTP is valid for 10 minutes. Call 123-456-7890 if you did not perform this request.`
+      text: `MSL Pakistan Verification For Membership Card Download.
+
+Your OTP Code is: {{otp_code}}
+This code is valid for {{validity}}.
+
+If you did not request this, please text us on {{support_number}} immediately.
+
+Developed by Abdul Manan`
     },
     createdAt: new Date().toISOString(),
     isDefault: true
@@ -40,7 +47,7 @@ const DEFAULT_TEMPLATES = {
     type: 'approval',
     description: 'Automatic template when membership is approved',
     content: {
-      text: `*Assalamu Alaikum {{first_name}},*\n\nWe are pleased to inform you that your membership with Muslim Students League (MSL) Pakistan has been approved successfully.\n\nYour official digital membership card has been generated and is now available for download.\n\nPlease click the button below and log in using your registered details to download your membership card.\n\nThis card serves as your official identification within MSL Pakistan.\n\nMembership ID: {{membership_id}}\n\nBest Regards\n*MSL IT DEPARTMENT*\n\nDevelop by Abdul Manan`
+      text: `Your membership for MSL is successfully approved. Now you can download your card.\n\nMembership ID: {{membership_id}}`
     },
     createdAt: new Date().toISOString(),
     isDefault: true

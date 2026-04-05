@@ -293,7 +293,7 @@ const VerifyMember: React.FC = () => {
                         <FormItem>
                           <FormControl>
                             <Input
-                              placeholder={mode === 'whatsapp' ? 'e.g. 03176227245' : 'e.g. MSL2026-01'}
+                              placeholder={mode === 'whatsapp' ? 'e.g. 0319822245' : 'e.g. MSL2026-01'}
                               {...field}
                               className="h-12 text-base msl-input"
                               inputMode={mode === 'whatsapp' ? 'tel' : 'text'}
@@ -305,7 +305,7 @@ const VerifyMember: React.FC = () => {
                     />
                     <p className="text-xs text-muted-foreground mt-1">
                       {mode === 'whatsapp'
-                        ? 'Enter your registered WhatsApp number starting with 031762'
+                        ? 'Enter your registered WhatsApp number (e.g. 0319822245)'
                         : 'Enter your Membership ID (e.g. MSL2026-01)'}
                     </p>
                   </div>
@@ -328,6 +328,18 @@ const VerifyMember: React.FC = () => {
               </Form>
             </CardContent>
           </Card>
+
+          <div className="w-full text-center mt-3 mb-6">
+            <p className="text-xs text-gray-600 mb-2">If you face any error, contact us on WhatsApp.</p>
+            <a
+              href="https://wa.me/923298876069"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center rounded-md bg-[#014f35] px-4 py-2 text-xs font-medium text-white hover:bg-[#013d29] transition-colors"
+            >
+              Contact on Whatsapp
+            </a>
+          </div>
 
           {hasSearched && notFound && (
             <Card className="w-full border-0 animate-in fade-in slide-in-from-bottom-4 duration-300 bg-gradient-to-br from-red-500 to-red-600 rounded-2xl shadow-sm p-1">
