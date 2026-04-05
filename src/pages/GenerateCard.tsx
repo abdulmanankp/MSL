@@ -5,7 +5,6 @@ import * as z from 'zod';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import Logo from '@/components/Logo';
-import Footer from '@/components/Footer';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -53,6 +52,38 @@ const statusColors: Record<string, string> = {
   inactive: 'bg-gray-100 text-gray-800',
 };
 
+const buildWhatsAppSearchVariants = (value: string): string[] => {
+  const raw = value.trim();
+  const digits = raw.replace(/\D/g, '');
+  const variants = new Set<string>();
+
+  if (raw) variants.add(raw);
+  if (digits) variants.add(digits);
+
+  if (digits.startsWith('0') && digits.length > 1) {
+    const localPart = digits.slice(1);
+    variants.add(`92${localPart}`);
+    variants.add(`+92${localPart}`);
+    variants.add(`0092${localPart}`);
+  }
+
+  if (digits.startsWith('92') && digits.length > 2) {
+    const localPart = digits.slice(2);
+    variants.add(`0${localPart}`);
+    variants.add(`+${digits}`);
+    variants.add(`0092${localPart}`);
+  }
+
+  if (digits.startsWith('0092') && digits.length > 4) {
+    const localPart = digits.slice(4);
+    variants.add(`0${localPart}`);
+    variants.add(`92${localPart}`);
+    variants.add(`+92${localPart}`);
+  }
+
+  return Array.from(variants);
+};
+
 const GenerateCard: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -71,24 +102,75 @@ const GenerateCard: React.FC = () => {
     setMember(null);
     try {
       const identifier = values.identifier.trim();
-      let query = supabase.from('members').select('*');
+
       if (mode === 'membership') {
-        query = query.eq('membership_id', identifier);
+        const { data, error } = await supabase
+          .from('members')
+          .select('*')
+          .eq('membership_id', identifier)
+          .maybeSingle();
+
+        if (error) {
+          toast.error('Something went wrong. Please try again.');
+          console.error('Fetch error:', error);
+          return;
+        }
+
+        if (!data) {
+          toast.error('No member found with this ID or WhatsApp number');
+          return;
+        }
+
+        setMember(data);
+        toast.success('Member found!');
       } else {
-        query = query.eq('whatsapp_number', identifier);
-      }
-      const { data, error } = await query.maybeSingle();
-      if (error) {
-        toast.error('Something went wrong. Please try again.');
-        console.error('Fetch error:', error);
-        return;
-      }
-      if (!data) {
+        const variants = buildWhatsAppSearchVariants(identifier);
+
+        const { data: exactData, error: exactError } = await supabase
+          .from('members')
+          .select('*')
+          .in('whatsapp_number', variants)
+          .limit(1)
+          .maybeSingle();
+
+        if (exactError) {
+          toast.error('Something went wrong. Please try again.');
+          console.error('Fetch error:', exactError);
+          return;
+        }
+
+        if (exactData) {
+          setMember(exactData);
+          toast.success('Member found!');
+          return;
+        }
+
+        const digits = identifier.replace(/\D/g, '');
+        const tail = digits.length >= 10 ? digits.slice(-10) : digits;
+
+        if (tail) {
+          const { data: fallbackData, error: fallbackError } = await supabase
+            .from('members')
+            .select('*')
+            .ilike('whatsapp_number', `%${tail}%`)
+            .limit(1)
+            .maybeSingle();
+
+          if (fallbackError) {
+            toast.error('Something went wrong. Please try again.');
+            console.error('Fetch error:', fallbackError);
+            return;
+          }
+
+          if (fallbackData) {
+            setMember(fallbackData);
+            toast.success('Member found!');
+            return;
+          }
+        }
+
         toast.error('No member found with this ID or WhatsApp number');
-        return;
       }
-      setMember(data);
-      toast.success('Member found!');
     } catch (error) {
       toast.error('Something went wrong. Please try again.');
       console.error('Fetch error:', error);
@@ -194,7 +276,7 @@ const GenerateCard: React.FC = () => {
     if (!member) return;
     setIsGenerating(true);
     try {
-      const pdfBlob = await generatePdfmeCard(member);
+      const pdfBlob = await generatePdfmeCard(member, member.core_team ? 'core-team' : 'standard');
       const url = URL.createObjectURL(pdfBlob);
       const a = document.createElement('a');
       a.href = url;
@@ -259,14 +341,13 @@ const GenerateCard: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <main className="flex-1 container mx-auto px-4 py-8 max-w-2xl">
-        <div className="flex flex-col items-center">
+    <div className="msl-page-bg flex flex-col">
+      <main className="flex-1 container mx-auto px-4 py-6 md:py-8 max-w-2xl">
+        <div className="msl-panel flex flex-col items-center p-4 md:p-6">
           <Logo className="mb-6" />
           
           <Button 
-            variant="outline" 
-            className="mb-4"
+            className="mb-4 bg-gradient-to-r from-[#014f35] to-[#1a7d52] text-white hover:shadow-lg border-0 shadow-md font-semibold transition-all duration-200"
             onClick={() => window.location.href = '/'}
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
@@ -274,20 +355,20 @@ const GenerateCard: React.FC = () => {
           </Button>
           
           <div className="w-full mb-6 text-center">
-            <span className="inline-block px-4 py-1.5 rounded-full bg-primary text-primary-foreground text-xs font-medium uppercase tracking-wider mb-3">
+            <span className="inline-block px-4 py-1.5 rounded-full bg-gradient-to-r from-[#014f35] to-[#1a7d52] text-white text-xs font-medium uppercase tracking-wider mb-3 shadow-lg">
               <CreditCard className="inline h-3 w-3 mr-1" />
               Membership Card
             </span>
-            <h1 className="text-2xl md:text-3xl font-bold" style={{ color: '#014f35' }}>
+            <h1 className="text-2xl md:text-4xl font-bold text-[#014f35]">
               Download Your Card
             </h1>
-            <p className="text-muted-foreground mt-2">
+            <p className="text-gray-600 mt-2 text-sm md:text-base">
               Enter your Membership ID or WhatsApp number to download your card
             </p>
           </div>
           
-          <Card className="w-full mb-6">
-            <CardContent className="pt-6">
+          <Card className="w-full mb-6 msl-form-shell p-1 border-0 shadow-sm">
+            <CardContent className="pt-6 bg-white rounded-xl">
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
                   {/* Animated tab selector */}
@@ -331,7 +412,7 @@ const GenerateCard: React.FC = () => {
                             <Input
                               placeholder={mode === 'whatsapp' ? 'e.g. 03176227245' : 'e.g. MSL2026-01'}
                               {...field}
-                              className="h-12 text-base"
+                              className="h-12 text-base msl-input"
                               inputMode={mode === 'whatsapp' ? 'tel' : 'text'}
                             />
                           </FormControl>
@@ -366,16 +447,17 @@ const GenerateCard: React.FC = () => {
           </Card>
 
           {member && (
-            <Card className="w-full animate-in fade-in slide-in-from-bottom-4 duration-300">
-              <CardHeader className="pb-4">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg">Member Details</CardTitle>
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium capitalize ${statusColors[member.status]}`}>
-                    {member.status}
-                  </span>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
+            <Card className="w-full animate-in fade-in slide-in-from-bottom-4 duration-300 msl-form-shell p-1 border-0 shadow-sm">
+              <div className="bg-white rounded-xl">
+                <CardHeader className="pb-4">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg text-[#014f35]">Member Details</CardTitle>
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium capitalize ${statusColors[member.status]}`}>
+                      {member.status}
+                    </span>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="flex items-start gap-3">
                     <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -454,30 +536,46 @@ const GenerateCard: React.FC = () => {
                   </Button>
                 </div>
               </CardContent>
+              </div>
             </Card>
           )}
         </div>
       </main>
       
       {otpModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
-            <h3 className="text-lg font-semibold mb-2">Enter OTP</h3>
-            <p className="text-sm text-muted-foreground mb-4">We've sent an OTP to {member?.whatsapp_number}. Enter it below to verify and download your card.</p>
-            <input
-              value={otpCode}
-              onChange={(e) => setOtpCode(e.target.value)}
-              placeholder="Enter OTP"
-              className="w-full p-2 border rounded mb-3"
-            />
-            <div className="flex gap-2">
-              <Button onClick={verifyOtp} disabled={isVerifyingOtp || !otpCode}>
-                {isVerifyingOtp ? 'Verifying...' : 'Verify & Download'}
-              </Button>
-              <Button variant="outline" onClick={() => { setOtpModalOpen(false); setOtpCode(''); }}>
-                Cancel
-              </Button>
-              <Button variant="ghost" onClick={sendOtp} disabled={isSendingOtp}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-4">
+          <div className="msl-form-shell rounded-2xl p-1 w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="bg-white rounded-xl p-4 sm:p-6 md:p-8">
+              <h3 className="text-xl md:text-2xl font-bold text-[#014f35] mb-2">Enter OTP</h3>
+              <p className="text-sm md:text-base text-gray-600 mb-6">We've sent an OTP to <span className="font-semibold">{member?.whatsapp_number}</span>. Enter it below to verify and download your card.</p>
+              <input
+                value={otpCode}
+                onChange={(e) => setOtpCode(e.target.value)}
+                placeholder="Enter 6-digit OTP"
+                maxLength={6}
+                inputMode="numeric"
+                className="w-full p-3 md:p-4 border-2 border-[#99b6aa] rounded-lg mb-6 text-lg font-semibold text-center focus:outline-none focus:border-[#014f35] transition-colors"
+              />
+              <div className="flex flex-col sm:flex-row gap-2 md:gap-3">
+                <Button 
+                  onClick={verifyOtp} 
+                  disabled={isVerifyingOtp || !otpCode}
+                  className="flex-1 bg-gradient-to-r from-[#014f35] to-[#1a7d52] text-white hover:shadow-lg border-0 font-semibold py-2 md:py-3 rounded-lg transition-all duration-200"
+                >
+                  {isVerifyingOtp ? 'Verifying...' : 'Verify & Download'}
+                </Button>
+                <Button 
+                  onClick={() => { setOtpModalOpen(false); setOtpCode(''); }}
+                  className="flex-1 bg-gray-200 text-gray-800 hover:bg-gray-300 border-0 font-semibold py-2 md:py-3 rounded-lg transition-all duration-200"
+                >
+                  Cancel
+                </Button>
+              </div>
+              <Button 
+                onClick={sendOtp} 
+                disabled={isSendingOtp}
+                className="w-full mt-3 bg-transparent text-[#014f35] hover:bg-gray-100 border border-[#014f35] font-semibold py-2 md:py-3 rounded-lg transition-all duration-200"
+              >
                 {isSendingOtp ? 'Resending...' : 'Resend OTP'}
               </Button>
             </div>
@@ -485,7 +583,6 @@ const GenerateCard: React.FC = () => {
         </div>
       )}
 
-      <Footer />
     </div>
   );
 };

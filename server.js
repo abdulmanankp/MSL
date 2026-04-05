@@ -802,7 +802,9 @@ const pdfStorage = multer.diskStorage({
     cb(null, pdfDir);
   },
   filename: (req, file, cb) => {
-    cb(null, 'template.pdf'); // Always save as template.pdf to overwrite previous
+    const templateKey = String(req.query.templateKey || req.body?.templateKey || 'standard');
+    const safeTemplateKey = templateKey === 'core-team' ? 'core-team' : 'standard';
+    cb(null, `${safeTemplateKey}.pdf`);
   }
 });
 
@@ -874,14 +876,25 @@ app.post('/upload-template', pdfUpload.single('template'), (req, res) => {
   console.log('PDF upload request received');
   console.log('File:', req.file);
   console.log('Body:', req.body);
+  const templateKey = String(req.query.templateKey || req.body?.templateKey || 'standard');
+  const safeTemplateKey = templateKey === 'core-team' ? 'core-team' : 'standard';
   
   if (!req.file) {
     console.log('No file uploaded');
     return res.status(400).json({ error: 'No PDF file uploaded' });
   }
+  const templateDir = path.join(__dirname, 'storage', 'template');
+  if (!fs.existsSync(templateDir)) {
+    fs.mkdirSync(templateDir, { recursive: true });
+  }
+
+  if (!req.file.path) {
+    console.log('Uploaded PDF path missing');
+    return res.status(500).json({ error: 'Failed to store PDF file' });
+  }
   // Return the URL to access the PDF
   const baseUrl = process.env.API_URL || `http://localhost:${PORT}`;
-  const fileUrl = `${baseUrl}/get-pdf-template`;
+  const fileUrl = `${baseUrl}/get-pdf-template?templateKey=${safeTemplateKey}`;
   console.log('File uploaded successfully:', fileUrl);
   res.json({ url: fileUrl });
 });
@@ -897,14 +910,16 @@ process.on('unhandledRejection', (reason) => {
 
 // Save template data endpoint
 app.post('/save-template', express.json(), (req, res) => {
-  const { template } = req.body;
+  const { template, templateKey } = req.body;
   if (!template) {
     return res.status(400).json({ error: 'No template data provided' });
   }
 
+  const safeTemplateKey = templateKey === 'core-team' ? 'core-team' : 'standard';
+
   try {
     // Save template data to a JSON file
-    const templatePath = path.join(__dirname, 'storage', 'template', 'template.json');
+    const templatePath = path.join(__dirname, 'storage', 'template', `${safeTemplateKey}.json`);
     fs.writeFileSync(templatePath, JSON.stringify(template, null, 2));
     res.json({ success: true, message: 'Template saved successfully' });
   } catch (error) {
@@ -915,16 +930,22 @@ app.post('/save-template', express.json(), (req, res) => {
 
 // Load template data endpoint (with default fallback)
 app.get('/load-template', (req, res) => {
+  const templateKey = String(req.query.templateKey || 'standard');
+  const safeTemplateKey = templateKey === 'core-team' ? 'core-team' : 'standard';
   try {
-    const templatePath = path.join(__dirname, 'storage', 'template', 'template.json');
+    const templatePath = path.join(__dirname, 'storage', 'template', `${safeTemplateKey}.json`);
     if (fs.existsSync(templatePath)) {
       const templateData = fs.readFileSync(templatePath, 'utf8');
       res.json(JSON.parse(templateData));
     } else {
       // Fallback: serve default template
-      const defaultTemplatePath = path.join(__dirname, 'storage', 'template', 'default-template.json');
+      const defaultTemplatePath = path.join(__dirname, 'storage', 'template', `${safeTemplateKey}-default-template.json`);
+      const legacyDefaultTemplatePath = path.join(__dirname, 'storage', 'template', 'default-template.json');
       if (fs.existsSync(defaultTemplatePath)) {
         const defaultData = fs.readFileSync(defaultTemplatePath, 'utf8');
+        res.json(JSON.parse(defaultData));
+      } else if (fs.existsSync(legacyDefaultTemplatePath)) {
+        const defaultData = fs.readFileSync(legacyDefaultTemplatePath, 'utf8');
         res.json(JSON.parse(defaultData));
       } else {
         res.status(404).json({ error: 'No template found. Please design and save a template first.' });
@@ -983,7 +1004,9 @@ app.use('/fonts', express.static(fontsDir));
 
 // Get PDF template endpoint
 app.get('/get-pdf-template', (req, res) => {
-  const pdfPath = path.join(__dirname, 'storage', 'template', 'template.pdf');
+  const templateKey = String(req.query.templateKey || 'standard');
+  const safeTemplateKey = templateKey === 'core-team' ? 'core-team' : 'standard';
+  const pdfPath = path.join(__dirname, 'storage', 'template', `${safeTemplateKey}.pdf`);
   if (fs.existsSync(pdfPath)) {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET');

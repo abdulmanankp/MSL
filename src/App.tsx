@@ -9,6 +9,7 @@ import VerifyMember from "./pages/VerifyMember";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 import TemplateDesigner from "./pages/TemplateDesigner";
+import CoreTeamTemplateDesigner from "./pages/CoreTeamTemplateDesigner";
 
 const queryClient = new QueryClient();
 
@@ -24,6 +25,7 @@ const App = () => (
           <Route path="/verify-member" element={<VerifyMember />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="/template-designer" element={<TemplateDesigner />} />
+          <Route path="/core-team-template-designer" element={<CoreTeamTemplateDesigner />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

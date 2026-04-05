@@ -60,6 +60,7 @@ export type Database = {
           full_name: string
           id: string
           membership_id: string
+          core_team: boolean
           profile_photo_url: string | null
           status: Database["public"]["Enums"]["member_status"]
           updated_at: string
@@ -78,6 +79,7 @@ export type Database = {
           full_name: string
           id?: string
           membership_id: string
+          core_team?: boolean
           profile_photo_url?: string | null
           status?: Database["public"]["Enums"]["member_status"]
           updated_at?: string
@@ -96,6 +98,7 @@ export type Database = {
           full_name?: string
           id?: string
           membership_id?: string
+          core_team?: boolean
           profile_photo_url?: string | null
           status?: Database["public"]["Enums"]["member_status"]
           updated_at?: string

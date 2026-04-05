@@ -181,7 +181,7 @@ const ProfilePhotoUpload: React.FC<ProfilePhotoUploadProps> = ({
       </Button>
       
       <p className="text-xs text-muted-foreground text-center max-w-xs">
-        Upload a passport-size photo (max 250KB, auto-compressed). Stored on our secure file server.
+        Upload a passport-size photo (required, max 250KB, auto-compressed). Stored on our secure file server.
         {photoUrl && (
           <span className="block mt-1 text-green-600">
             ✓ Photo stored at: server.mslpakistan.org

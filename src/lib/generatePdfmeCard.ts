@@ -96,12 +96,12 @@ async function mapMemberToTemplateInput(member: Database['public']['Tables']['me
 }
 
 
-export async function generatePdfmeCard(member: Database['public']['Tables']['members']['Row']): Promise<Blob> {
+export async function generatePdfmeCard(member: Database['public']['Tables']['members']['Row'], templateKey: 'standard' | 'core-team' = 'standard'): Promise<Blob> {
   // Use dynamic API URL for production compatibility
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
   let response: Response;
   try {
-    response = await fetch(`${API_URL}/load-template`, { mode: 'cors' });
+    response = await fetch(`${API_URL}/load-template?templateKey=${templateKey}`, { mode: 'cors' });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(`Failed to reach template server at ${API_URL}. (${msg})`);

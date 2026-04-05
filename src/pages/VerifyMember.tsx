@@ -6,7 +6,6 @@ import * as z from 'zod';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import Logo from '@/components/Logo';
-import Footer from '@/components/Footer';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -52,6 +51,38 @@ const areaLabels: Record<string, string> = {
   it_department: 'IT Department',
 };
 
+const buildWhatsAppSearchVariants = (value: string): string[] => {
+  const raw = value.trim();
+  const digits = raw.replace(/\D/g, '');
+  const variants = new Set<string>();
+
+  if (raw) variants.add(raw);
+  if (digits) variants.add(digits);
+
+  if (digits.startsWith('0') && digits.length > 1) {
+    const localPart = digits.slice(1);
+    variants.add(`92${localPart}`);
+    variants.add(`+92${localPart}`);
+    variants.add(`0092${localPart}`);
+  }
+
+  if (digits.startsWith('92') && digits.length > 2) {
+    const localPart = digits.slice(2);
+    variants.add(`0${localPart}`);
+    variants.add(`+${digits}`);
+    variants.add(`0092${localPart}`);
+  }
+
+  if (digits.startsWith('0092') && digits.length > 4) {
+    const localPart = digits.slice(4);
+    variants.add(`0${localPart}`);
+    variants.add(`92${localPart}`);
+    variants.add(`+92${localPart}`);
+  }
+
+  return Array.from(variants);
+};
+
 const VerifyMember: React.FC = () => {
   const [searchParams] = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
@@ -68,35 +99,78 @@ const VerifyMember: React.FC = () => {
     },
   });
 
-  const searchMember = async (identifier: string) => {
+  const searchMember = async (identifier: string, searchMode: 'whatsapp' | 'membership') => {
     setIsLoading(true);
     setMember(null);
     setNotFound(false);
     setHasSearched(true);
     
     try {
-      let query = supabase.from('members').select('*');
-      
-      if (identifier.startsWith('MSL')) {
-        query = query.eq('membership_id', identifier);
+      if (searchMode === 'membership') {
+        const { data, error } = await supabase
+          .from('members')
+          .select('*')
+          .eq('membership_id', identifier)
+          .maybeSingle();
+
+        if (error) {
+          toast.error('Something went wrong. Please try again.');
+          console.error('Fetch error:', error);
+          return;
+        }
+
+        if (!data) {
+          setNotFound(true);
+          return;
+        }
+
+        setMember(data);
       } else {
-        query = query.eq('whatsapp_number', identifier);
-      }
-      
-      const { data, error } = await query.maybeSingle();
+        const variants = buildWhatsAppSearchVariants(identifier);
 
-      if (error) {
-        toast.error('Something went wrong. Please try again.');
-        console.error('Fetch error:', error);
-        return;
-      }
+        const { data: exactData, error: exactError } = await supabase
+          .from('members')
+          .select('*')
+          .in('whatsapp_number', variants)
+          .limit(1)
+          .maybeSingle();
 
-      if (!data) {
+        if (exactError) {
+          toast.error('Something went wrong. Please try again.');
+          console.error('Fetch error:', exactError);
+          return;
+        }
+
+        if (exactData) {
+          setMember(exactData);
+          return;
+        }
+
+        const digits = identifier.replace(/\D/g, '');
+        const tail = digits.length >= 10 ? digits.slice(-10) : digits;
+
+        if (tail) {
+          const { data: fallbackData, error: fallbackError } = await supabase
+            .from('members')
+            .select('*')
+            .ilike('whatsapp_number', `%${tail}%`)
+            .limit(1)
+            .maybeSingle();
+
+          if (fallbackError) {
+            toast.error('Something went wrong. Please try again.');
+            console.error('Fetch error:', fallbackError);
+            return;
+          }
+
+          if (fallbackData) {
+            setMember(fallbackData);
+            return;
+          }
+        }
+
         setNotFound(true);
-        return;
       }
-
-      setMember(data);
     } catch (error) {
       toast.error('Something went wrong. Please try again.');
       console.error('Fetch error:', error);
@@ -110,18 +184,13 @@ const VerifyMember: React.FC = () => {
     const memberId = searchParams.get('id');
     if (memberId) {
       form.setValue('identifier', memberId);
-      searchMember(memberId);
+      searchMember(memberId, 'membership');
     }
   }, [searchParams, form]);
 
   const onSubmit = async (values: FormValues) => {
     const value = values.identifier.trim();
-    if (mode === 'whatsapp') {
-      // Optionally add validation for WhatsApp number format
-    } else {
-      // Optionally add validation for Membership ID format
-    }
-    await searchMember(value);
+    await searchMember(value, mode);
   };
 
   const downloadCard = async () => {
@@ -156,23 +225,12 @@ const VerifyMember: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      {/* Full-width header bar */}
-      <div className="w-full bg-[#014f35] flex items-center justify-between px-4 py-2" style={{position: 'relative', left: 0, right: 0, top: 0}}>
-        <span className="text-white text-sm font-medium">Visit our official website</span>
-        <a
-          href="https://mslpakistan.com" target="_blank" rel="noopener noreferrer"
-          className="px-4 py-1.5 rounded-full bg-white text-[#014f35] font-semibold text-xs shadow hover:bg-[#abd8c9] transition-colors duration-150"
-        >
-          Visit MSL Official Website
-        </a>
-      </div>
-      <main className="flex-1 container mx-auto px-4 py-8 max-w-2xl">
-        <div className="flex flex-col items-center">
+    <div className="msl-page-bg flex flex-col">
+      <main className="flex-1 container mx-auto px-4 py-6 md:py-8 max-w-2xl">
+        <div className="msl-panel flex flex-col items-center p-4 md:p-6">
           <Logo className="mb-6" />
           <Button
-            variant="outline"
-            className="mb-4"
+            className="mb-4 bg-gradient-to-r from-[#014f35] to-[#1a7d52] text-white hover:shadow-lg border-0 shadow-md font-semibold transition-all duration-200"
             onClick={() => window.location.href = '/'}
           >
             <ShieldCheck className="h-4 w-4 mr-2" />
@@ -180,20 +238,20 @@ const VerifyMember: React.FC = () => {
           </Button>
           
           <div className="w-full mb-6 text-center">
-            <span className="inline-block px-4 py-1.5 rounded-full bg-primary text-primary-foreground text-xs font-medium uppercase tracking-wider mb-3">
+            <span className="inline-block px-4 py-1.5 rounded-full bg-gradient-to-r from-[#014f35] to-[#1a7d52] text-white text-xs font-medium uppercase tracking-wider mb-3 shadow-lg">
               <ShieldCheck className="inline h-3 w-3 mr-1" />
               Verification
             </span>
-            <h1 className="text-2xl md:text-3xl font-bold" style={{ color: '#014f35' }}>
+            <h1 className="text-2xl md:text-4xl font-bold text-[#014f35]">
               Verify Membership
             </h1>
-            <p className="text-muted-foreground mt-2">
+            <p className="text-gray-600 mt-2 text-sm md:text-base">
               Enter a Membership ID or WhatsApp number to verify
             </p>
           </div>
           
-          <Card className="w-full mb-6">
-            <CardContent className="pt-6">
+          <Card className="w-full mb-6 msl-form-shell p-1 border-0 shadow-sm">
+            <CardContent className="pt-6 bg-white rounded-xl">
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
                   {/* Animated tab selector */}
@@ -237,7 +295,7 @@ const VerifyMember: React.FC = () => {
                             <Input
                               placeholder={mode === 'whatsapp' ? 'e.g. 03176227245' : 'e.g. MSL2026-01'}
                               {...field}
-                              className="h-12 text-base"
+                              className="h-12 text-base msl-input"
                               inputMode={mode === 'whatsapp' ? 'tel' : 'text'}
                             />
                           </FormControl>
@@ -272,16 +330,16 @@ const VerifyMember: React.FC = () => {
           </Card>
 
           {hasSearched && notFound && (
-            <Card className="w-full border-destructive/50 animate-in fade-in slide-in-from-bottom-4 duration-300">
-              <CardContent className="pt-6">
+            <Card className="w-full border-0 animate-in fade-in slide-in-from-bottom-4 duration-300 bg-gradient-to-br from-red-500 to-red-600 rounded-2xl shadow-sm p-1">
+              <CardContent className="pt-6 bg-white rounded-xl">
                 <div className="flex flex-col items-center text-center py-8">
-                  <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
-                    <ShieldX className="h-8 w-8 text-destructive" />
+                  <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-4">
+                    <ShieldX className="h-8 w-8 text-red-600" />
                   </div>
-                  <h3 className="text-lg font-semibold text-foreground mb-2">
+                  <h3 className="text-lg font-bold text-red-600 mb-2">
                     Member Not Found
                   </h3>
-                  <p className="text-muted-foreground">
+                  <p className="text-gray-600">
                     This member is not registered or the information provided is incorrect.
                   </p>
                 </div>
@@ -290,7 +348,8 @@ const VerifyMember: React.FC = () => {
           )}
 
           {member && (
-            <Card className="w-full animate-in fade-in slide-in-from-bottom-4 duration-300">
+            <Card className="w-full animate-in fade-in slide-in-from-bottom-4 duration-300 msl-form-shell p-1 border-0 shadow-sm">
+              <div className="bg-white rounded-xl">
               <CardHeader className="pb-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -369,12 +428,11 @@ const VerifyMember: React.FC = () => {
                   </TableBody>
                 </Table>
               </CardContent>
+              </div>
             </Card>
           )}
         </div>
       </main>
-      
-      <Footer />
     </div>
   );
 };

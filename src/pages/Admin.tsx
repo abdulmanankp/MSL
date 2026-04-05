@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import Logo from '@/components/Logo';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
@@ -161,6 +162,7 @@ const Admin: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
+  const [memberEditDraft, setMemberEditDraft] = useState<Member | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
 
   // const [bucketFiles, setBucketFiles] = useState<string[]>([]);
@@ -371,6 +373,8 @@ const Admin: React.FC = () => {
           member.id === memberId ? { ...member, status: newStatus } : member
         )
       );
+      setSelectedMember(prev => prev && prev.id === memberId ? { ...prev, status: newStatus } : prev);
+      setMemberEditDraft(prev => prev && prev.id === memberId ? { ...prev, status: newStatus } : prev);
 
       toast.success('✅ Member status updated successfully!');
 
@@ -379,7 +383,7 @@ const Admin: React.FC = () => {
         try {
           const API_URL = import.meta.env.VITE_API_URL || '/';
           console.log('🧾 Generating card for member (on approval)...');
-          const pdfBlob = await generatePdfmeCard(memberBefore);
+          const pdfBlob = await generatePdfmeCard(memberBefore, memberBefore.core_team ? 'core-team' : 'standard');
 
           // Upload generated PDF to backend
           const form = new FormData();
@@ -425,6 +429,92 @@ const Admin: React.FC = () => {
     } catch (error) {
       console.error('❌ Exception during update:', error);
       toast.error('Failed to update member status');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const openMemberDetails = (member: Member) => {
+    setSelectedMember(member);
+    setMemberEditDraft(member);
+  };
+
+  const closeMemberDetails = () => {
+    setSelectedMember(null);
+    setMemberEditDraft(null);
+  };
+
+  const updateMemberDetails = async () => {
+    if (!selectedMember || !memberEditDraft) return;
+
+    setIsUpdating(true);
+    try {
+      const updatePayload = {
+        full_name: memberEditDraft.full_name,
+        email: memberEditDraft.email,
+        whatsapp_number: memberEditDraft.whatsapp_number,
+        designation: memberEditDraft.designation,
+        district: memberEditDraft.district,
+        provincial_seat: memberEditDraft.provincial_seat,
+        complete_address: memberEditDraft.complete_address,
+        area_of_interest: memberEditDraft.area_of_interest,
+        education_level: memberEditDraft.education_level,
+        profile_photo_url: memberEditDraft.profile_photo_url,
+      };
+
+      const { error } = await supabase
+        .from('members')
+        .update(updatePayload)
+        .eq('id', selectedMember.id);
+
+      if (error) {
+        if (error.message?.includes('row-level security')) {
+          toast.error('Admin permission denied. Please check the RLS policy.');
+        } else {
+          toast.error(`Failed to update member: ${error.message}`);
+        }
+        return;
+      }
+
+      const updatedMember = { ...selectedMember, ...updatePayload };
+      setMembers((prevMembers) =>
+        prevMembers.map((member) => (member.id === selectedMember.id ? updatedMember : member))
+      );
+      setSelectedMember(updatedMember);
+      setMemberEditDraft(updatedMember);
+      toast.success('Member data updated successfully');
+      await fetchMembers();
+    } catch (error) {
+      console.error('Update member error:', error);
+      toast.error('Failed to update member data');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const toggleCoreTeam = async (member: Member, enabled: boolean) => {
+    setIsUpdating(true);
+    try {
+      const { error } = await supabase
+        .from('members')
+        .update({ core_team: enabled })
+        .eq('id', member.id);
+
+      if (error) {
+        toast.error(`Failed to update core team flag: ${error.message}`);
+        return;
+      }
+
+      const updatedMember = { ...member, core_team: enabled };
+      setMembers((prevMembers) =>
+        prevMembers.map((item) => (item.id === member.id ? updatedMember : item))
+      );
+      setSelectedMember((prev) => (prev && prev.id === member.id ? updatedMember : prev));
+      setMemberEditDraft((prev) => (prev && prev.id === member.id ? updatedMember : prev));
+      toast.success(enabled ? 'Marked as core team member' : 'Removed from core team');
+    } catch (error) {
+      console.error('toggleCoreTeam error:', error);
+      toast.error('Failed to update core team flag');
     } finally {
       setIsUpdating(false);
     }
@@ -568,7 +658,7 @@ const Admin: React.FC = () => {
       }
 
       // Generate the card
-      const pdfBlob = await generatePdfmeCard(member);
+      const pdfBlob = await generatePdfmeCard(member, member.core_team ? 'core-team' : 'standard');
       
       // Download the card
       const url = URL.createObjectURL(pdfBlob);
@@ -678,6 +768,11 @@ const Admin: React.FC = () => {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <Link to="/core-team-template-designer">
+              <Button variant="ghost" title="Open Core Team Template Designer">
+                <FileText className="h-4 w-4" />
+              </Button>
+            </Link>
             <Button 
               variant="ghost" 
               onClick={() => setTemplateManagerOpen(true)}
@@ -903,6 +998,7 @@ const Admin: React.FC = () => {
                       <TableHead>WhatsApp</TableHead>
                       <TableHead>District</TableHead>
                       <TableHead>Provincial Seat</TableHead>
+                      <TableHead>Core Team</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
@@ -944,6 +1040,13 @@ const Admin: React.FC = () => {
                         <TableCell>{member.district}</TableCell>
                         <TableCell>{member.provincial_seat ? member.provincial_seat : <span className="text-muted-foreground">Not set</span>}</TableCell>
                         <TableCell>
+                          <input
+                            type="checkbox"
+                            checked={Boolean(member.core_team)}
+                            onChange={e => toggleCoreTeam(member, e.target.checked)}
+                          />
+                        </TableCell>
+                        <TableCell>
                           <Badge variant="outline" className={statusColors[member.status]}>
                             {member.status}
                           </Badge>
@@ -953,7 +1056,7 @@ const Admin: React.FC = () => {
                             <Button
                               size="sm"
                               variant="ghost"
-                              onClick={() => setSelectedMember(member)}
+                              onClick={() => openMemberDetails(member)}
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
@@ -1015,7 +1118,7 @@ const Admin: React.FC = () => {
                     ))}
                     {filteredMembers.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                        <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
                           No members found
                         </TableCell>
                       </TableRow>
@@ -1031,10 +1134,10 @@ const Admin: React.FC = () => {
         </Tabs>
 
         {/* Member Detail Dialog */}
-        <Dialog open={!!selectedMember} onOpenChange={() => setSelectedMember(null)}>
+        <Dialog open={!!selectedMember} onOpenChange={closeMemberDetails}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Member Details</DialogTitle>
+              <DialogTitle>Member Details & Edit</DialogTitle>
               <DialogDescription>{selectedMember?.membership_id}</DialogDescription>
             </DialogHeader>
             {selectedMember && (
@@ -1057,6 +1160,14 @@ const Admin: React.FC = () => {
                   <div>
                     <h3 className="text-xl font-bold">{selectedMember.full_name}</h3>
                     <p className="text-muted-foreground">{selectedMember.designation}</p>
+                    <div className="mt-2 flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(memberEditDraft?.core_team)}
+                        onChange={(e) => toggleCoreTeam(selectedMember, e.target.checked)}
+                      />
+                      <span className="text-muted-foreground">Core Team</span>
+                    </div>
                     <Badge variant="outline" className={`mt-2 ${statusColors[selectedMember.status]}`}>
                       {selectedMember.status}
                     </Badge>
@@ -1065,42 +1176,124 @@ const Admin: React.FC = () => {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
+                    <p className="text-sm text-muted-foreground">Full Name</p>
+                    <Input
+                      value={memberEditDraft?.full_name || ''}
+                      onChange={(e) => setMemberEditDraft(prev => prev ? { ...prev, full_name: e.target.value } : prev)}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Designation</p>
+                    <Input
+                      value={memberEditDraft?.designation || ''}
+                      onChange={(e) => setMemberEditDraft(prev => prev ? { ...prev, designation: e.target.value } : prev)}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
                     <p className="text-sm text-muted-foreground">Email</p>
-                    <p className="font-medium">{selectedMember.email}</p>
+                    <Input
+                      value={memberEditDraft?.email || ''}
+                      onChange={(e) => setMemberEditDraft(prev => prev ? { ...prev, email: e.target.value } : prev)}
+                      className="mt-1"
+                    />
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">WhatsApp</p>
-                    <p className="font-medium">{selectedMember.whatsapp_number}</p>
+                    <Input
+                      value={memberEditDraft?.whatsapp_number || ''}
+                      onChange={(e) => setMemberEditDraft(prev => prev ? { ...prev, whatsapp_number: e.target.value } : prev)}
+                      className="mt-1"
+                    />
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">District</p>
-                    <p className="font-medium">{selectedMember.district}</p>
+                    <Input
+                      value={memberEditDraft?.district || ''}
+                      onChange={(e) => setMemberEditDraft(prev => prev ? { ...prev, district: e.target.value } : prev)}
+                      className="mt-1"
+                    />
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Provincial Seat</p>
-                    <p className="font-medium">{selectedMember.provincial_seat ? selectedMember.provincial_seat : <span className="text-muted-foreground">Not set</span>}</p>
+                    <Input
+                      value={memberEditDraft?.provincial_seat || ''}
+                      onChange={(e) => setMemberEditDraft(prev => prev ? { ...prev, provincial_seat: e.target.value } : prev)}
+                      className="mt-1"
+                      placeholder="Not set"
+                    />
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Area of Interest</p>
-                    <p className="font-medium">{areaLabels[selectedMember.area_of_interest]}</p>
+                    <Select
+                      value={memberEditDraft?.area_of_interest}
+                      onValueChange={(value) => setMemberEditDraft(prev => prev ? { ...prev, area_of_interest: value as Member['area_of_interest'] } : prev)}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Select area" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="muslim_kids">Muslim Kids</SelectItem>
+                        <SelectItem value="media_department">Media Department</SelectItem>
+                        <SelectItem value="madadgar_team">Madadgar Team</SelectItem>
+                        <SelectItem value="universities_department">Universities Department</SelectItem>
+                        <SelectItem value="msl_team">MSL Team</SelectItem>
+                        <SelectItem value="it_department">IT Department</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Education Level</p>
-                    <p className="font-medium">{educationLabels[selectedMember.education_level]}</p>
+                    <Select
+                      value={memberEditDraft?.education_level}
+                      onValueChange={(value) => setMemberEditDraft(prev => prev ? { ...prev, education_level: value as Member['education_level'] } : prev)}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Select education" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="hafiz_quran">Hafiz e Quran</SelectItem>
+                        <SelectItem value="matric">Matric</SelectItem>
+                        <SelectItem value="inter">Inter</SelectItem>
+                        <SelectItem value="bs">BS</SelectItem>
+                        <SelectItem value="masters">Masters</SelectItem>
+                        <SelectItem value="phd">PHD</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 
                 <div>
                   <p className="text-sm text-muted-foreground">Complete Address</p>
-                  <p className="font-medium">{selectedMember.complete_address}</p>
+                  <Textarea
+                    value={memberEditDraft?.complete_address || ''}
+                    onChange={(e) => setMemberEditDraft(prev => prev ? { ...prev, complete_address: e.target.value } : prev)}
+                    className="mt-1 min-h-[100px]"
+                  />
                 </div>
 
                 <div>
                   <p className="text-sm text-muted-foreground">Degree & Institute</p>
-                  <p className="font-medium">{selectedMember.degree_institute}</p>
+                  <Textarea
+                    value={memberEditDraft?.degree_institute || ''}
+                    onChange={(e) => setMemberEditDraft(prev => prev ? { ...prev, degree_institute: e.target.value } : prev)}
+                    className="mt-1 min-h-[100px]"
+                  />
                 </div>
 
                 <div className="flex gap-3 pt-4 border-t">
+                  <Button
+                    variant="default"
+                    onClick={updateMemberDetails}
+                    disabled={isUpdating}
+                    className="flex items-center gap-2 bg-[#014f35] text-white hover:bg-[#013d29]"
+                  >
+                    {isUpdating ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : null}
+                    {isUpdating ? 'Saving...' : 'Save Changes'}
+                  </Button>
                   {selectedMember.status === 'approved' && (
                     <Button
                       variant="default"
@@ -1131,7 +1324,7 @@ const Admin: React.FC = () => {
                       <SelectItem value="inactive">Inactive</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Button variant="outline" onClick={() => setSelectedMember(null)}>
+                  <Button variant="outline" onClick={closeMemberDetails}>
                     Close
                   </Button>
                 </div>
