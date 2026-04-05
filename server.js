@@ -181,12 +181,19 @@ app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders: (res, path) => {
     if (path.endsWith('.js') || path.endsWith('.mjs')) {
       res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     } else if (path.endsWith('.css')) {
       res.setHeader('Content-Type', 'text/css; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     } else if (path.endsWith('.json')) {
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
     } else if (path.endsWith('.wasm')) {
       res.setHeader('Content-Type', 'application/wasm');
+    } else if (path.endsWith('.html')) {
+      // Never cache HTML shell so users always get the latest deployed UI.
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
     }
   }
 }));
@@ -213,6 +220,9 @@ app.get('/health', (req, res) => {
 // Root endpoint to prevent 404 on /
 app.get('/', (req, res) => {
   // Serve frontend index.html for root
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
@@ -1032,6 +1042,9 @@ app.use((req, res, next) => {
   // Otherwise, serve the React app (for /admin and all SPA routes)
   const indexPath = path.join(__dirname, 'public', 'index.html');
   if (fs.existsSync(indexPath)) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.sendFile(indexPath);
   } else {
     res.status(500).json({ 
