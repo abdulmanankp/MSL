@@ -231,6 +231,34 @@ const GenerateCard: React.FC = () => {
         setOtpModalOpen(true);
         console.log('📱 OTP sent. Template:', json?.template);
         toast.success('OTP sent to your WhatsApp number');
+
+        // Background-check delivery status to surface WhatsApp failures quickly.
+        if (json?.messageId) {
+          const baseUrl = API_URL.replace(/\/$/, '');
+          void (async () => {
+            for (let attempt = 0; attempt < 6; attempt++) {
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              try {
+                const statusResp = await fetch(`${baseUrl}/whatsapp/message-status/${json.messageId}`);
+                if (!statusResp.ok) continue;
+                const statusJson = await statusResp.json();
+                const status = statusJson?.status?.status;
+                if (status === 'failed') {
+                  const errors = statusJson?.status?.errors || [];
+                  const firstErr = errors[0] || {};
+                  const errText = firstErr?.title || firstErr?.message || 'WhatsApp could not deliver OTP';
+                  toast.error(`OTP delivery failed: ${errText}`);
+                  break;
+                }
+                if (status === 'delivered' || status === 'read') {
+                  break;
+                }
+              } catch {
+                // Ignore transient polling errors
+              }
+            }
+          })();
+        }
       } else {
         console.error('sendOtp failed', json);
         toast.error('Failed to send OTP. Please try again later.');

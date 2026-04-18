@@ -266,6 +266,39 @@ const cardUpload = multer({
 
 // In-memory OTP store (phone -> { code, expires })
 const otpStore = new Map();
+// In-memory WhatsApp message tracker (message_id -> status + metadata)
+const whatsappMessageStatusStore = new Map();
+const MAX_TRACKED_WHATSAPP_MESSAGES = 1000;
+
+function rememberWhatsAppMessageStatus(messageId, statusPayload) {
+  if (!messageId) return;
+  whatsappMessageStatusStore.set(messageId, {
+    ...statusPayload,
+    updatedAt: new Date().toISOString()
+  });
+
+  // Bound memory usage for long-running processes
+  if (whatsappMessageStatusStore.size > MAX_TRACKED_WHATSAPP_MESSAGES) {
+    const oldestKey = whatsappMessageStatusStore.keys().next().value;
+    if (oldestKey) whatsappMessageStatusStore.delete(oldestKey);
+  }
+}
+
+function trackOutgoingWhatsAppMessage(apiResult, metadata = {}) {
+  const messageId = apiResult?.messages?.[0]?.id;
+  if (!messageId) return null;
+
+  rememberWhatsAppMessageStatus(messageId, {
+    messageId,
+    status: apiResult?.messages?.[0]?.message_status || 'accepted',
+    phone: metadata.phone || null,
+    template: metadata.template || null,
+    sentAt: new Date().toISOString(),
+    source: metadata.source || 'unknown'
+  });
+
+  return messageId;
+}
 
 // Helper to call WhatsApp Cloud API (Facebook Graph API)
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN || '';
@@ -274,26 +307,45 @@ const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || '';
 const GRAPH_API_VERSION = process.env.GRAPH_API_VERSION || 'v17.0';
 const WEBHOOK_VERIFY_TOKEN = process.env.WEBHOOK_VERIFY_TOKEN || 'msl_pakistan_whatsapp_webhook_secret_verify_token';
 
-// Helper function: Convert Pakistani phone number format for WhatsApp
-// Converts: 03176227245 → +923176227245
+// Helper function: Normalize Pakistani mobile number.
+// Returns canonical digits format for WhatsApp API: 923xxxxxxxxx
+function normalizePakistaniPhone(phone) {
+  if (phone == null) return '';
+
+  // Keep only digits to handle spaces, +, dashes, brackets, etc.
+  let cleaned = String(phone).replace(/\D/g, '');
+  if (!cleaned) return '';
+
+  // Convert international prefix 0092... -> 92...
+  if (cleaned.startsWith('0092')) {
+    cleaned = cleaned.slice(2);
+  }
+
+  // Fix common incorrect format: 9203xxxxxxxxx -> 923xxxxxxxxx
+  if (cleaned.startsWith('920') && cleaned.length === 13) {
+    cleaned = `92${cleaned.slice(3)}`;
+  }
+
+  // Local format: 03xxxxxxxxx -> 923xxxxxxxxx
+  if (cleaned.startsWith('0') && cleaned.length === 11) {
+    cleaned = `92${cleaned.slice(1)}`;
+  }
+
+  // Local format without leading 0: 3xxxxxxxxx -> 923xxxxxxxxx
+  if (cleaned.startsWith('3') && cleaned.length === 10) {
+    cleaned = `92${cleaned}`;
+  }
+
+  // Accept only canonical PK mobile length after normalization
+  if (!cleaned.startsWith('92') || cleaned.length !== 12) {
+    return '';
+  }
+
+  return cleaned;
+}
+
 function formatPhoneForWhatsApp(phone) {
-  if (!phone) return phone;
-  
-  // Remove any existing +, spaces, or dashes
-  let cleaned = phone.replace(/[\s\-+]/g, '');
-  
-  // If it already starts with 92 (country code), just add +
-  if (cleaned.startsWith('92')) {
-    return '+' + cleaned;
-  }
-  
-  // If it starts with 0, replace with 92 (Pakistan country code)
-  if (cleaned.startsWith('0')) {
-    return '+92' + cleaned.slice(1);
-  }
-  
-  // If no prefix, assume it's a Pakistani number, add +92
-  return '+92' + cleaned;
+  return normalizePakistaniPhone(phone);
 }
 
 async function sendWhatsAppText(phone, text) {
@@ -303,6 +355,9 @@ async function sendWhatsAppText(phone, text) {
   }
 
   const formattedPhone = formatPhoneForWhatsApp(phone);
+  if (!formattedPhone) {
+    return { error: 'Invalid Pakistani WhatsApp number format' };
+  }
   const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
   const body = {
     messaging_product: 'whatsapp',
@@ -326,6 +381,9 @@ async function sendWhatsAppMedia(phone, mediaUrl, caption) {
   }
 
   const formattedPhone = formatPhoneForWhatsApp(phone);
+  if (!formattedPhone) {
+    return { error: 'Invalid Pakistani WhatsApp number format' };
+  }
   const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
   const body = {
     messaging_product: 'whatsapp',
@@ -372,42 +430,57 @@ app.post('/webhook', express.json(), (req, res) => {
 
   // Check if this is a message webhook event
   if (body.object) {
-    if (
-      body.entry &&
-      body.entry[0].changes &&
-      body.entry[0].changes[0].value.messages &&
-      body.entry[0].changes[0].value.messages[0]
-    ) {
-      const phoneNumberId = body.entry[0].changes[0].value.metadata.phone_number_id;
-      const from = body.entry[0].changes[0].value.messages[0].from;
-      const msgBody = body.entry[0].changes[0].value.messages[0].text.body;
+    const entries = Array.isArray(body.entry) ? body.entry : [];
+    for (const entry of entries) {
+      const changes = Array.isArray(entry?.changes) ? entry.changes : [];
+      for (const change of changes) {
+        const value = change?.value || {};
 
-      console.log(`📨 Incoming message from ${from}: "${msgBody}"`);
+        // Incoming user messages
+        const inboundMessages = Array.isArray(value.messages) ? value.messages : [];
+        for (const inbound of inboundMessages) {
+          const from = inbound?.from || 'unknown';
+          const msgBody = inbound?.text?.body || '[non-text message]';
+          logInfo(`📨 Incoming message from ${from}: "${msgBody}"`);
+        }
 
-      // TODO: Add your business logic here to handle incoming messages
-      // For example:
-      // - Store message in database
-      // - Route to appropriate handler based on keywords
-      // - Send automated responses
+        // Outgoing message status callbacks (accepted, sent, delivered, read, failed)
+        const statuses = Array.isArray(value.statuses) ? value.statuses : [];
+        for (const messageStatus of statuses) {
+          if (!messageStatus?.id) continue;
 
-      // Store message details in memory or database for audit trail
-      console.log(`Message received from ${from}: ${msgBody}`);
-    } else if (
-      body.entry &&
-      body.entry[0].changes &&
-      body.entry[0].changes[0].value.statuses
-    ) {
-      // Handle message status updates (delivered, read, failed, etc.)
-      const messageStatus = body.entry[0].changes[0].value.statuses[0];
-      logInfo(`📊 Message status update: ${messageStatus.id} - ${messageStatus.status}`, messageStatus);
-      
-      // Log status for delivery/read receipts
-      if (messageStatus.status === 'delivered') {
-        logInfo(`✅ Message delivered: ${messageStatus.id}`, messageStatus);
-      } else if (messageStatus.status === 'read') {
-        logInfo(`👁️  Message read: ${messageStatus.id}`, messageStatus);
-      } else if (messageStatus.status === 'failed') {
-        logError(`❌ Message failed: ${messageStatus.id}`, messageStatus);
+          const existing = whatsappMessageStatusStore.get(messageStatus.id) || {};
+          const status = messageStatus.status || existing.status || 'unknown';
+          const errorDetails = Array.isArray(messageStatus.errors) && messageStatus.errors.length
+            ? messageStatus.errors
+            : existing.errors || [];
+
+          const merged = {
+            ...existing,
+            messageId: messageStatus.id,
+            status,
+            recipientId: messageStatus.recipient_id || existing.recipientId || null,
+            conversation: messageStatus.conversation || existing.conversation || null,
+            pricing: messageStatus.pricing || existing.pricing || null,
+            errors: errorDetails,
+            rawStatusPayload: messageStatus
+          };
+          rememberWhatsAppMessageStatus(messageStatus.id, merged);
+
+          logInfo(`📊 Message status update: ${messageStatus.id} - ${status}`, merged);
+
+          if (status === 'delivered') {
+            logInfo(`✅ Message delivered: ${messageStatus.id}`, merged);
+          } else if (status === 'read') {
+            logInfo(`👁️  Message read: ${messageStatus.id}`, merged);
+          } else if (status === 'failed') {
+            const errSummary = (errorDetails || [])
+              .map(e => `${e?.code || ''} ${e?.title || e?.message || ''}`.trim())
+              .filter(Boolean)
+              .join(' | ');
+            logError(`❌ Message failed: ${messageStatus.id}${errSummary ? ` -> ${errSummary}` : ''}`, merged);
+          }
+        }
       }
     }
 
@@ -435,19 +508,24 @@ app.post('/upload-card', cardUpload.single('card'), (req, res) => {
 app.post('/whatsapp/send-otp', express.json(), async (req, res) => {
   const { phone, language = 'en_US', first_name, membership_id } = req.body || {};
   if (!phone) return res.status(400).json({ error: 'phone is required' });
+  const normalizedPhone = normalizePakistaniPhone(phone);
+  if (!normalizedPhone) {
+    return res.status(400).json({ error: 'Invalid WhatsApp number format' });
+  }
   const code = Math.floor(100000 + Math.random() * 900000).toString();
-  const expires = Date.now() + 5 * 60 * 1000; // 5 minutes
-  otpStore.set(phone, { code, expires });
+  const expires = Date.now() + 10 * 60 * 1000; // 10 minutes
+  otpStore.set(normalizedPhone, { code, expires });
   const templateId = 'otp_verification';
   const langCode = 'en_US';
-  const baseParams = [code, 'MSL Card', '5 min', '03176227245'];
-  // For a button of type 'copy_code', pass the OTP code as the button parameter
-  const buttonParam = code;
-  const otpText = `MSL Pakistan Verification For Membership Card Download.\n\nYour OTP Code is: ${code}\nThis code is valid for 5 minutes.\n\nIf you did not request this, please text us on 03298876069 immediately.\n\nDeveloped by Abdul Manan`;
+  const fallbackParamPool = [code, 'Membership Card', '10 minutes', '+92 319 1255858'];
+  // Send OTP template without button to maximize deliverability.
+   const buttonParam = code;
+  const otpText = `OTP Code: ${code}. This is your OTP for _*MSL Pakistan Membership Card Download.*_ The OTP is valid for 10 minutes. WhatsApp  +92 319 1255858  if you did not perform this request.`;
   try {
     // Template-first is required for business-initiated WhatsApp delivery.
-    let params = [...baseParams];
-    let result = await sendWhatsAppTemplate(phone, templateId, langCode, params, buttonParam, 'copy_code');
+    // This template currently expects 4 body params, so send all on first attempt.
+    let params = [...fallbackParamPool];
+    let result = await sendWhatsAppTemplate(normalizedPhone, templateId, langCode, params, buttonParam, 'copy_code');
     let usedFallbackText = false;
     let usedTemplateFallback = false;
 
@@ -456,24 +534,17 @@ app.post('/whatsapp/send-otp', express.json(), async (req, res) => {
     if (result?.error?.code === 132000 && mismatch) {
       const expectedParams = Number(mismatch[1]);
       if (Number.isFinite(expectedParams) && expectedParams >= 0) {
-        const adjusted = baseParams.slice(0, expectedParams);
-        while (adjusted.length < expectedParams) adjusted.push('');
+        const adjusted = fallbackParamPool.slice(0, expectedParams);
+        while (adjusted.length < expectedParams) adjusted.push('N/A');
         params = adjusted;
         logWarn(`OTP params mismatch; retrying with ${expectedParams} params`, { expectedParams, params });
-        result = await sendWhatsAppTemplate(phone, templateId, langCode, params, buttonParam, 'copy_code');
+        result = await sendWhatsAppTemplate(normalizedPhone, templateId, langCode, params, buttonParam, 'copy_code');
       }
     }
 
-    const buttonDetails = result?.error?.error_data?.details || '';
-    const buttonErrorCodes = new Set([100, 131008]);
-    if (result?.error && buttonErrorCodes.has(result.error.code) && /button|buttons/i.test(buttonDetails)) {
-      logWarn(`OTP button config failed; retrying without button`, result);
-      result = await sendWhatsAppTemplate(phone, templateId, langCode, params, null, 'url');
-    }
-
     if (result && result.error) {
-      logWarn(`OTP template failed for ${phone}, sending text fallback`, result);
-      result = await sendWhatsAppText(phone, otpText);
+      logWarn(`OTP template failed for ${normalizedPhone}, sending text fallback`, result);
+      result = await sendWhatsAppText(normalizedPhone, otpText);
       usedFallbackText = true;
       usedTemplateFallback = true;
     }
@@ -481,27 +552,52 @@ app.post('/whatsapp/send-otp', express.json(), async (req, res) => {
       logError(`❌ OTP send failed [${templateId}]:`, result);
       return res.status(500).json({ error: 'Failed to send OTP', template: templateId, result, usedFallbackText, usedTemplateFallback });
     } else {
-      logInfo(`✅ OTP sent [${templateId}] to ${phone}:`, result);
+      const messageId = trackOutgoingWhatsAppMessage(result, {
+        phone: normalizedPhone,
+        template: templateId,
+        source: 'otp_send'
+      });
+      logInfo(`✅ OTP sent [${templateId}] to ${normalizedPhone}:`, result);
+      return res.json({
+        success: true,
+        template: templateId,
+        phone: normalizedPhone,
+        messageId,
+        deliveryStatus: messageId ? (whatsappMessageStatusStore.get(messageId)?.status || 'accepted') : 'unknown',
+        result,
+        usedFallbackText,
+        usedTemplateFallback
+      });
     }
-    res.json({ success: true, template: templateId, result, usedFallbackText, usedTemplateFallback });
   } catch (err) {
     logError(`❌ OTP send exception [${templateId}]:`, err);
     res.status(500).json({ error: 'Failed to send OTP', template: templateId });
   }
 });
 
+// Endpoint: get latest tracked WhatsApp status by message id
+app.get('/whatsapp/message-status/:id', (req, res) => {
+  const id = req.params?.id;
+  if (!id) return res.status(400).json({ error: 'message id is required' });
+  const status = whatsappMessageStatusStore.get(id);
+  if (!status) return res.status(404).json({ error: 'Message status not found' });
+  return res.json({ success: true, status });
+});
+
 // Endpoint: verify OTP
 app.post('/whatsapp/verify-otp', express.json(), (req, res) => {
   const { phone, code } = req.body || {};
   if (!phone || !code) return res.status(400).json({ error: 'phone and code required' });
-  const entry = otpStore.get(phone);
+  const normalizedPhone = normalizePakistaniPhone(phone);
+  if (!normalizedPhone) return res.status(400).json({ error: 'Invalid WhatsApp number format' });
+  const entry = otpStore.get(normalizedPhone);
   if (!entry) return res.status(400).json({ error: 'No OTP requested' });
   if (Date.now() > entry.expires) {
-    otpStore.delete(phone);
+    otpStore.delete(normalizedPhone);
     return res.status(400).json({ error: 'OTP expired' });
   }
   if (entry.code !== code.toString()) return res.status(400).json({ error: 'Invalid code' });
-  otpStore.delete(phone);
+  otpStore.delete(normalizedPhone);
   return res.json({ success: true });
 });
 
@@ -1126,19 +1222,33 @@ async function sendWhatsAppTemplate(phone, templateName, languageCode = 'en', pa
   }
 
   const formattedPhone = formatPhoneForWhatsApp(phone);
+  if (!formattedPhone) {
+    return { error: 'Invalid Pakistani WhatsApp number format' };
+  }
   const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
 
   // Build components for body parameters
-  const bodyParams = (parameters || []).map(p => ({ type: 'text', text: String(p) }));
+  const bodyParams = (parameters || []).map((p) => {
+    const textValue = String(p ?? '').trim();
+    return { type: 'text', text: textValue || 'N/A' };
+  });
   const components = [];
   if (bodyParams.length) {
     components.push({ type: 'body', parameters: bodyParams });
   }
-  // For authentication templates with copy code button, use type=url and pass code as text param
-  if (buttonParam && buttonType === 'copy_code') {
+  // Copy code button payload variant 1
+  if (buttonParam && buttonType === 'copy_code_coupon') {
     components.push({
       type: 'button',
-      sub_type: 'url',
+      sub_type: 'copy_code',
+      index: 0,
+      parameters: [{ type: 'coupon_code', coupon_code: String(buttonParam) }]
+    });
+  // Copy code button payload variant 2
+  } else if (buttonParam && buttonType === 'copy_code_text') {
+    components.push({
+      type: 'button',
+      sub_type: 'copy_code',
       index: 0,
       parameters: [{ type: 'text', text: String(buttonParam) }]
     });

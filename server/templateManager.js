@@ -27,14 +27,7 @@ const DEFAULT_TEMPLATES = {
     type: 'otp',
     description: 'Automatic template for card download verification',
     content: {
-      text: `MSL Pakistan Verification For Membership Card Download.
-
-Your OTP Code is: {{otp_code}}
-This code is valid for {{validity}}.
-
-If you did not request this, please text us on {{support_number}} immediately.
-
-Developed by Abdul Manan`
+      text: `OTP Code: {{otp_code}}. This is your OTP for _*MSL Pakistan Membership Card Download.*_ The OTP is valid for 10 minutes. WhatsApp  +92 319 1255858  if you did not perform this request.`
     },
     createdAt: new Date().toISOString(),
     isDefault: true
