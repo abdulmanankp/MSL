@@ -137,6 +137,7 @@
     "Shaheed Benazirabad": ["PS-37","PS-38","PS-39"],
     "Shangla": ["PK-23"],
     "Sheikhupura": ["PP-125","PP-126","PP-127","PP-128","PP-129","PP-130"],
+    "Sialkot": ["PP-44","PP-45","PP-46","PP-47","PP-48","PP-49","PP-50","PP-51","PP-52","PP-53"],
     "Sherani": ["PB-8"],
     "Shigar": ["GBLA-20"],
     "Shikarpur": ["PS-7","PS-8","PS-9"],
@@ -148,7 +149,7 @@
     "Sukkur": ["PS-23","PS-24","PS-25"],
     "Swabi": ["PK-43","PK-44","PK-45","PK-46","PK-47","PK-48"],
     "Swat": ["PK-4","PK-5","PK-6","PK-7","PK-8","PK-9","PK-10","PK-11","PK-12","PK-13","PK-14"],
-
+    
     "Tank": ["PK-109"],
     "Tando Allahyar": ["PS-65"],
     "Tando Muhammad Khan": ["PS-66"],
