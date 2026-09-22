@@ -16,7 +16,7 @@ export const pakistanDistricts = [
   "Abbottabad", "Bannu", "Batagram", "Buner", "Charsadda", "Chitral Lower", "Chitral Upper",
   "Dera Ismail Khan", "Hangu", "Haripur", "Karak", "Kohat", "Kolai-Palas", "Lakki Marwat",
   "Lower Dir", "Lower Kohistan", "Malakand", "Mansehra", "Mardan", "Nowshera", "Orakzai",
-  "Peshawar", "Shangla", "Swabi", "Swat", "Tank", "Torghar", "Upper Dir", "Upper Kohistan",
+  "Peshawar", "Shangla", "Swabi", "Sialkot" "Swat", "Tank", "Torghar", "Upper Dir", "Upper Kohistan",
   // Balochistan
   "Awaran", "Barkhan", "Chagai", "Dera Bugti", "Gwadar", "Harnai", "Jafarabad", "Jhal Magsi",
   "Kachhi", "Kalat", "Kech", "Kharan", "Khuzdar", "Killa Abdullah", "Killa Saifullah",
