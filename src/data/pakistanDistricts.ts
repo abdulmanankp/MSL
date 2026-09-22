@@ -4,7 +4,7 @@ export const pakistanDistricts = [
   "Faisalabad", "Gujranwala", "Gujrat", "Hafizabad", "Jhang", "Jhelum", "Kasur", "Khanewal",
   "Khushab", "Lahore", "Layyah", "Lodhran", "Mandi Bahauddin", "Mianwali", "Multan",
   "Muzaffargarh", "Nankana Sahib", "Narowal", "Okara", "Pakpattan", "Rahim Yar Khan",
-  "Rajanpur", "Rawalpindi", "Sahiwal", "Sargodha", "Sheikhupura", "Sialkot", "Toba Tek Singh",
+  "Rajanpur", "Rawalpindi", "Sahiwal", "Sialkot", "Sargodha", "Sheikhupura", "Toba Tek Singh",
   "Vehari",
   // Sindh
   "Badin", "Dadu", "Ghotki", "Hyderabad", "Jacobabad", "Jamshoro", "Karachi Central",
