@@ -76,8 +76,10 @@ async function mapMemberToTemplateInput(member: Database['public']['Tables']['me
     }
   }
 
-  // Generate QR code
-  const qrCodeBase64 = await generateQRCodeBase64(`https://mslpakistan.org/verify-member?id=${member.membership_id}`);
+  // Generate a live verification QR code for this member.
+  const verificationBaseUrl = import.meta.env.VITE_PUBLIC_SITE_URL || window.location.origin;
+  const verificationUrl = `${verificationBaseUrl.replace(/\/$/, '')}/verify-member?id=${encodeURIComponent(member.membership_id)}`;
+  const qrCodeBase64 = await generateQRCodeBase64(verificationUrl);
 
   return {
     full_name: member.full_name,

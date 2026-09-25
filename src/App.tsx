@@ -23,6 +23,7 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/generate-card" element={<GenerateCard />} />
           <Route path="/verify-member" element={<VerifyMember />} />
+          <Route path="/verify/:memberId" element={<VerifyMember />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="/template-designer" element={<TemplateDesigner />} />
           <Route path="/core-team-template-designer" element={<CoreTeamTemplateDesigner />} />

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -84,6 +84,7 @@ const buildWhatsAppSearchVariants = (value: string): string[] => {
 };
 
 const VerifyMember: React.FC = () => {
+  const { memberId: pathMemberId } = useParams<{ memberId: string }>();
   const [searchParams] = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
   const [member, setMember] = useState<Member | null>(null);
@@ -181,12 +182,13 @@ const VerifyMember: React.FC = () => {
 
   // Handle QR code scans with membership ID in URL
   useEffect(() => {
-    const memberId = searchParams.get('id');
+    const memberId = searchParams.get('id') || pathMemberId;
     if (memberId) {
-      form.setValue('identifier', memberId);
-      searchMember(memberId, 'membership');
+      const decodedMemberId = decodeURIComponent(memberId);
+      form.setValue('identifier', decodedMemberId);
+      searchMember(decodedMemberId, 'membership');
     }
-  }, [searchParams, form]);
+  }, [pathMemberId, searchParams, form]);
 
   const onSubmit = async (values: FormValues) => {
     const value = values.identifier.trim();
