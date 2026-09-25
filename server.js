@@ -64,7 +64,6 @@ const HOST = process.env.HOST || '0.0.0.0'; // Listen on all interfaces for clou
 // CORS: Allow specific origins (production and local dev)
 // For Hostinger: Origins can be any domain since Hostinger uses its own subdomain
 const allowedOrigins = [
-  'https://mslpakistan.online',
   'http://localhost:3001',
   'http://localhost:5173', 
   'http://join.mslpakistan.org', 

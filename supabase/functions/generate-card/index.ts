@@ -233,8 +233,7 @@ Deno.serve(async (req) => {
       } else if (field.field_type === 'qr_code') {
         try {
           // Generate a live verification QR code for this member.
-          const siteUrl = Deno.env.get('SITE_URL') || 'https://mslpakistan.org';
-          const verificationUrl = `${siteUrl.replace(/\/$/, '')}/verify-member?id=${encodeURIComponent(member.membership_id)}`;
+          const verificationUrl = `https://join.mslpakistan.org/verify-member?id=${encodeURIComponent(member.membership_id)}`;
           
           const qrCodeDataUrl = await QRCode.toDataURL(verificationUrl, {
             width: Math.min(field.width || 100, 500), // Cap at 500px for performance

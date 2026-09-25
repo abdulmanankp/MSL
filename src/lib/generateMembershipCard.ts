@@ -64,7 +64,7 @@ export async function generateMembershipCard(
   });
 
   // Generate QR code for verification
-  const verificationUrl = `${verificationBaseUrl}/verify-member?id=${member.membership_id}`;
+  const verificationUrl = `https://join.mslpakistan.org/verify-member?id=${encodeURIComponent(member.membership_id)}`;
   const qrCodeDataUrl = await generateQRCode(verificationUrl);
 
   // Load profile photo if exists

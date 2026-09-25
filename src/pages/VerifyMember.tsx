@@ -332,14 +332,14 @@ const VerifyMember: React.FC = () => {
           </Card>
 
           <div className="w-full text-center mt-3 mb-6">
-            <p className="text-xs text-gray-600 mb-2">If you face any error, contact us on WhatsApp.</p>
+            <p className="text-xs text-gray-600 mb-2">If you face any error, contact us on Email.</p>
             <a
-              href="https://wa.me/923298876069"
+              href="mailto:Support@mslpakistan.org"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center justify-center rounded-md bg-[#014f35] px-4 py-2 text-xs font-medium text-white hover:bg-[#013d29] transition-colors"
             >
-              Contact on Whatsapp
+              Support@mslpakistan.org
             </a>
           </div>
 
